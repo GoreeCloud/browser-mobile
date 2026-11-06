@@ -921,10 +921,11 @@ private fun PrivacyStat(
 
 @Composable
 private fun SheetHeading(title: String, subtitle: String, palette: GcPalette) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
-        Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = palette.text)
-        Spacer(Modifier.height(3.dp))
-        Text(subtitle, fontSize = 12.sp, color = palette.muted)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+        Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = palette.text,
+            lineHeight = 33.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(subtitle, fontSize = 14.sp, color = palette.muted, lineHeight = 20.sp)
     }
 }
 
@@ -1019,19 +1020,23 @@ private fun PrivacyPanel(
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
         Row(
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp)
-                .fillMaxWidth().background(palette.surfaceAlt, RoundedCornerShape(20.dp))
-                .padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 9.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(20.dp))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column {
-                Text("${tab.blocked}", color = palette.text, fontSize = 22.sp,
+            Column(Modifier.weight(1f)) {
+                Text("${tab.blocked}", color = palette.text, fontSize = 25.sp,
                     fontWeight = FontWeight.Bold)
-                Text("Blocked on this tab", color = palette.muted, fontSize = 11.sp)
+                Text("Blocked on this tab", color = palette.muted,
+                    fontSize = 12.sp, lineHeight = 18.sp)
             }
-            Column {
-                Text("$cleanedCount", color = palette.text, fontSize = 22.sp,
+            Column(Modifier.weight(1f)) {
+                Text("$cleanedCount", color = palette.text, fontSize = 25.sp,
                     fontWeight = FontWeight.Bold)
-                Text("Tracking fields removed", color = palette.muted, fontSize = 11.sp)
+                Text("Tracking fields removed", color = palette.muted,
+                    fontSize = 12.sp, lineHeight = 18.sp)
             }
         }
         PrivacyToggle(
@@ -1342,7 +1347,16 @@ private fun WebspacesPanel(
         webspaces.entries.forEach { space ->
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 5.dp)
-                    .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
+                    .background(
+                        if (current.webspaceId == space.id) palette.surfaceAlt else palette.surface,
+                        RoundedCornerShape(18.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (current.webspaceId == space.id) palette.accent.copy(alpha = 0.65f)
+                        else palette.outline.copy(alpha = 0.38f),
+                        RoundedCornerShape(18.dp)
+                    )
                     .clickable { open(space.id) }
                     .heightIn(min = 70.dp)
                     .padding(horizontal = 15.dp, vertical = 9.dp),
@@ -1353,6 +1367,10 @@ private fun WebspacesPanel(
                 Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                     Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp)
+                    if (current.webspaceId == space.id) {
+                        Text("CURRENT WEBSPACE", color = palette.accent,
+                            fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                     val count = tabs.count { it.webspaceId == space.id }
                     Text(count.toString() + if (count == 1) " tab" else " tabs",
                         color = palette.muted, fontSize = 12.sp)
