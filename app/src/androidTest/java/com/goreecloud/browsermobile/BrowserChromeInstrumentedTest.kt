@@ -1,6 +1,7 @@
 package com.goreecloud.browsermobile
 
 import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -35,9 +36,20 @@ class BrowserChromeInstrumentedTest {
     }
 
     @Test
+    fun webspacesDiscloseSharedCookiesAndGuardEmptyNames() {
+        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNodeWithText("Webspaces").performClick()
+
+        composeRule.onNodeWithText("Webspaces organize tabs", substring = true)
+            .assertExists()
+        composeRule.onNodeWithText("Add Webspace")
+            .performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test
     fun optionalPrivacyFiltersRemainDiscoverable() {
         composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.onNodeWithText("Manage").performClick()
+        composeRule.onNodeWithText("Manage").performScrollTo().performClick()
         composeRule.onNodeWithText("Privacy center").assertExists()
 
         composeRule.onNodeWithText("Manage filter lists").performScrollTo().performClick()
