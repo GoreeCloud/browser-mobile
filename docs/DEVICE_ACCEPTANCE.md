@@ -123,3 +123,71 @@ consent and avoid incidental access to personal browsing data.
   Re-run CI and relevant behavioral tests after any corrective source commit.
 - This checklist does not certify WCAG, WebView security guarantees, full adblocking,
   Android-version parity, Stable readiness, deployment, or release.
+
+## November 6 review-branch device validation — consented install and regression checks
+
+**Scope and consent.** The owner explicitly authorized device installation during this interaction.
+On the authorized OnePlus N200 (DE2117, Android 16/API 36, 1080×2400; physical
+density 450 with an existing override of 404), ADB identified an already-installed
+`com.goreecloud.browsermobile` debug package. Before installing, the existing APK's
+signer and the laptop's existing debug keystore were independently compared:
+both reported certificate SHA-256
+`1182a19bd68de4fc95cd513a509391026c8e64173f00a38028190fae2f3b68d9`.
+No signing key was extracted or uploaded.
+
+**Build and install evidence.** An isolated source checkout pinned to UI source
+commit `2a0e4092e0fafc0ade00d5bc0b99612c879d3dfb` passed local
+`:app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug`
+using the already-installed JetBrains JDK 21 and Gradle 9.5.0.
+[Exact-commit GitHub CI](https://github.com/GoreeCloud/browser-mobile/actions/runs/42297113814)
+also completed **SUCCESS**. The local, development-signed app APK had SHA-256
+`d67853d90560b01b2064448015cf1a25de462e86132d2098ddd6173d98e08e63`.
+`adb install -r` reported **Success**, and package-manager readback confirmed the
+installed package path. The app launched and rendered on the device. **No uninstall
+or app-data clear was performed.** Existing recent-site cards remained visible on Home;
+individual visited hosts and notifications were not recorded in this public report.
+
+**Android 16 instrumentation.** An initial three-test run failed in the old
+Espresso runtime before app interactions because it attempted the removed
+`InputManager.getInstance()` reflection. Upgrading the **test-only**
+dependencies to stable Espresso 3.7.0, AndroidX Test Runner 1.7.0 and ext:junit
+1.3.0 corrected the harness; the next three-test run passed **3/3**. The final
+test-only commit `f18e20869ac649a36da1b8069f276de1fc4b86fc` compiled an APK whose
+app portion is byte-identical to the installed UI commit; the instrumentation
+APK passed signing verification and the full on-device suite passed **4/4 in
+13.894 seconds**. Scenarios:
+- Separate Home and New Tab navigation.
+- Privacy Center optional-list expansion and collapse.
+- Webspaces shared-cookie warning and disabled invalid custom-space creation.
+- Open **Clear recent websites and favicons**, verify confirmation, and choose
+  **Cancel** without invoking the destructive action.
+
+**Screenshot-led bounded visual review.** Local app-only screenshots were
+captured privately for New Tab, Home, overflow menu, Privacy Center, Webspaces
+and the tab switcher; status/navigation-bar regions were cropped before review.
+The originally observed half-height settings sheets limited the visible controls.
+The UI source was corrected so **Privacy Center and Webspaces expand on opening**,
+while the short tab-switcher remains partially expanded. Follow-up screenshots
+showed the expanded settings content, six built-in Webspace rows in a scrollable
+view, and a correctly labeled active Home tab; no obvious clipping was seen at
+the tested **portrait, light-mode** device size. Screenshots containing local site
+history were **not** committed or published.
+
+**Important limitations.** This is a bounded app UI/device smoke test,
+not full release acceptance or a security/privacy certification. Dark-mode,
+increased font scales, landscape, lower Android APIs/OEMs, TalkBack/keyboard,
+long-URL/page loading, real request blocking, update recovery, Webspace
+site routing, cookie isolation, and destructive **Confirm** paths remain
+unverified. The non-destructive Cancel test does not establish that cleared data
+can be recovered. The existing host-only visited index and WebView cookies were
+not intentionally cleared.
+
+**Mandatory artifact delivery outstanding.** Governing instructions require
+each installer APK delivered for testing/release to exist as a standalone
+`.apk` in the authorized `GoreeCloud/Artifacts` Drive folder. The tested
+APK's checksum, source, and local path are verified, but an authorized binary
+transfer into that Drive folder has **not** been completed or confirmed through
+available connector capabilities. The GitHub Actions ZIP artifact does **not**
+satisfy the standalone Drive requirement and may have a different debug signer.
+Do not claim compliant APK delivery, distribute it as a user installer, or
+promote the draft PR until that and the remaining acceptance gates are resolved.
