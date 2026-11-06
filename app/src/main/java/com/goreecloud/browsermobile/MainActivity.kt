@@ -78,6 +78,7 @@ import com.goreecloud.browsermobile.core.NavigationPolicy
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
+import com.goreecloud.browsermobile.core.SiteExceptions
 import com.goreecloud.browsermobile.core.SearchPolicy
 import com.goreecloud.browsermobile.core.UrlCleaner
 import java.io.ByteArrayInputStream
@@ -209,6 +210,7 @@ private fun configureWebView(
             request: WebResourceRequest
         ): WebResourceResponse? {
             if (preferences.blockAds && !request.isForMainFrame &&
+                !preferences.isSiteExempt(tab.url) &&
                 filterLists.shouldBlock(request.url.toString())) {
                 mainHandler.post { tab.blocked++ }
                 return WebResourceResponse(
@@ -983,6 +985,22 @@ private fun PrivacyPanel(
                 if (enabled) filterLists.refresh()
             }
         )
+        if (tab.surface == Surface.WEB) {
+            val siteHost = SiteExceptions.hostForPage(tab.url)
+            if (siteHost != null) {
+                val exempted = siteHost in preferences.siteExceptionHosts
+                PrivacyToggle(
+                    "Allow ads on this site",
+                    (if (exempted) "Filtering paused for " else "Block ads on ") + siteHost +
+                        " · reloads this tab when changed",
+                    exempted, palette,
+                    { allow ->
+                        preferences.setSiteExempt(tab.url, allow)
+                        tab.webView?.reload()
+                    }
+                )
+            }
+        }
         PrivacyToggle(
             "URL cleaner",
             "Removes recognized marketing parameters from links.",
@@ -1015,7 +1033,8 @@ private fun PrivacyPanel(
             )
         }
         Text(
-            filterLists.activeRuleCount.toString() + " unique active domains. Some ads cannot be blocked.",
+            filterLists.activeRuleCount.toString() + " active domains · " +
+                preferences.siteExceptionHosts.size + " site exceptions. Some ads cannot be blocked.",
             modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp),
             color = palette.muted, fontSize = 12.sp
         )

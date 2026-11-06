@@ -21,6 +21,11 @@ class BrowserPreferences(context: Context) {
     var savedSites by mutableStateOf(loadSites())
         private set
 
+    // Immutable snapshots allow safe reads from WebView's background request threads.
+    @Volatile private var exceptionSnapshot = loadSiteExceptions()
+    var siteExceptionHosts by mutableStateOf(exceptionSnapshot)
+        private set
+
     init { CookieManager.getInstance().setAcceptCookie(acceptCookies) }
 
     fun updateBlockAds(enabled: Boolean) {
@@ -44,12 +49,40 @@ class BrowserPreferences(context: Context) {
         storage.edit().putBoolean("third_party_cookies", enabled).apply()
     }
 
+    fun isSiteExempt(pageUrl: String): Boolean =
+        SiteExceptions.isAllowed(exceptionSnapshot, pageUrl)
+
+    fun setSiteExempt(pageUrl: String, exempt: Boolean) {
+        val host = SiteExceptions.hostForPage(pageUrl) ?: return
+        val next = if (exempt) {
+            if (host !in exceptionSnapshot && exceptionSnapshot.size >= 100) return
+            exceptionSnapshot + host
+        } else {
+            exceptionSnapshot - host
+        }
+        exceptionSnapshot = next
+        siteExceptionHosts = next
+        val array = JSONArray()
+        next.sorted().forEach(array::put)
+        storage.edit().putString("site_exceptions", array.toString()).apply()
+    }
+
     fun toggleBookmark(url: String) {
         if (!NavigationPolicy.isHttpUrl(url)) return
         savedSites = if (url in savedSites) savedSites - url else (listOf(url) + savedSites).take(30)
         val array = JSONArray()
         savedSites.forEach(array::put)
         storage.edit().putString("bookmarks", array.toString()).apply()
+    }
+
+    private fun loadSiteExceptions(): Set<String> = try {
+        val array = JSONArray(storage.getString("site_exceptions", "[]"))
+        (0 until minOf(array.length(), 100)).mapNotNull { index ->
+            val candidate = array.getString(index)
+            SiteExceptions.hostForPage("https://" + candidate)
+        }.toSet()
+    } catch (_: Exception) {
+        emptySet()
     }
 
     private fun loadSites(): List<String> = try {

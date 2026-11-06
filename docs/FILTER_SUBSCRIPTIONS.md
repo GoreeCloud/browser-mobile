@@ -16,12 +16,12 @@ OISD Big contains Small, so switching on Big automatically switches off Small, a
 
 ## How it works
 
-- Users can enable or disable each list in **Privacy center → Filter subscriptions**, or disable adblocking entirely with the master switch.
+- Users can enable or disable each list in **Privacy center → Filter subscriptions**, or disable adblocking entirely with the master switch. While visiting a website, **Allow ads on this site** permits that specific top-level hostname to load all its subresources without filter-list blocking; turning it off resumes protection for that site. This is a user opt-in exception stored locally, not a bypass controlled by a website.
 - Enabled lists are downloaded directly from their publishers over TLS on the first run when blocking is active. Only fixed, reviewed HTTPS endpoints are supported; arbitrary remote list URLs are not yet accepted.
 - The app checks for updates at startup if the cached list is at least 24 hours old; **Update enabled lists now** starts an explicit refresh. No independent unattended update process is configured.
 - Downloads use bounded network and file sizes, a strict HTTP 200 response, limited parser syntax, a minimum parsed rule count, and atomic replacement of a previous successful cache.
 - If the download fails, the last valid locally cached list remains active. Until any list is successfully loaded, a minimal built-in starter set of domains provides limited fallback. The UI shows whether each selected list has actually loaded.
-- Only HTTP(S) **subresource** hosts in the Android WebView are matched; main-frame navigation is not blocked by the filter engine. Rules use exact domain or dot-boundary subdomain matching.
+- Only HTTP(S) **subresource** hosts in the Android WebView are matched; main-frame navigation is not blocked by the filter engine. The per-site bypass matches only the explicitly selected top-level host, not arbitrary lookalike hosts, parent domains, or all subdomains. Rules use exact domain or dot-boundary subdomain matching.
 - The app does **not** intercept or modify operating-system DNS, TLS, VPN traffic, other apps, first-party page scripts, or cosmetic page elements. It cannot guarantee blocking every ad or tracker.
 - All downloaded list files are stored in application-private storage. Browser requests are not sent to a filter-list server for decisions. Fetching updates does contact each enabled publisher, which receives the ordinary network request/IP information.
 

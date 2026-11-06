@@ -4,7 +4,8 @@
 
 - `MainActivity.kt`: native Compose toolbar, Home, New Tab, tabs, privacy settings, Android WebView host.
 - `core/NavigationPolicy.kt`: HTTPS-or-HTTP URL acceptance, search fallback, tracking parameter normalization and starter domain blocklist.
-- `core/BrowserPreferences.kt`: app-private preference and bookmark persistence; WebView CookieManager toggles.
+- `core/BrowserPreferences.kt`: app-private preference, bookmark and site-exception persistence; WebView CookieManager toggles.
+- `core/SiteExceptions.kt`: exact-host, HTTP(S)-only per-site filter exceptions with no automatic subdomain exemptions.
 - Android WebView is the system website renderer, **not** an independently maintained browser engine.
 
 ## Key trust boundaries
@@ -19,7 +20,7 @@
 
 ## Security and release backlog
 
-1. Expand the initial OISD/StevenBlack subscription engine with complete false-positive controls, optional per-site allow rules, richer filter syntaxes where technically feasible, offline startup testing and performance measurements.
+1. Expand the initial OISD/StevenBlack subscription engine with per-site exception UX testing (implemented as an exact-host toggle), richer filter syntaxes where technically feasible, offline startup testing and performance measurements.
 2. Implement accurate per-site cookies, site permission prompts, downloads and safe file upload policy.
 3. Review browser role handling, deep links, redirects, local-network access, HTTPS-only mode and threat-model regressions.
 4. Add persistent tab sessions, site history with private-mode boundaries and user-controlled retention.
