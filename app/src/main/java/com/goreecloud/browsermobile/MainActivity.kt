@@ -40,6 +40,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -64,6 +66,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -71,6 +74,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -126,19 +134,21 @@ private data class GcPalette(
     val success: Color
 )
 
+// Native mapping of the stable GC UI v1 Iris semantic palette.
+// Keep light/dark colors paired with their explicit on-colors.
 private val DarkGc = GcPalette(
-    canvas = Color(0xFF0B1123), surface = Color(0xFF17213A),
-    surfaceAlt = Color(0xFF202B47), text = Color(0xFFF5F6FF),
-    muted = Color(0xFFAFBDD6), accent = Color(0xFFB3BAFF),
-    accentOn = Color(0xFF182143), outline = Color(0xFF34405F),
-    success = Color(0xFF8BE7CB)
+    canvas = Color(0xFF10131E), surface = Color(0xFF1D2231),
+    surfaceAlt = Color(0xFF292F40), text = Color(0xFFF2F2FA),
+    muted = Color(0xFFB3B9CF), accent = Color(0xFFC5BFFF),
+    accentOn = Color(0xFF241B66), outline = Color(0xFF747C99),
+    success = Color(0xFF9CE3B9)
 )
 private val LightGc = GcPalette(
-    canvas = Color(0xFFF4F6FE), surface = Color.White,
-    surfaceAlt = Color(0xFFE9EDFA), text = Color(0xFF19223E),
-    muted = Color(0xFF5D6880), accent = Color(0xFF4D5ED6),
-    accentOn = Color.White, outline = Color(0xFFD4DDF0),
-    success = Color(0xFF077D63)
+    canvas = Color(0xFFECF0F8), surface = Color(0xFFF9FAFD),
+    surfaceAlt = Color(0xFFE5EBF6), text = Color(0xFF20243A),
+    muted = Color(0xFF5F657B), accent = Color(0xFF5145D9),
+    accentOn = Color.White, outline = Color(0xFF8990A7),
+    success = Color(0xFF206A46)
 )
 
 class MainActivity : ComponentActivity() {
@@ -321,6 +331,9 @@ private fun BrowserApp(
     var panel by remember { mutableStateOf<Panel?>(null) }
     var cleanedCount by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
+    val configuration = LocalConfiguration.current
+    val compactHeader = configuration.screenWidthDp < 390 ||
+        configuration.fontScale >= 1.25f
 
     fun openUrl(input: String) {
         val resolved = NavigationPolicy.resolve(input, preferences.cleanUrls)
@@ -400,39 +413,69 @@ private fun BrowserApp(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 21.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier = Modifier.size(31.dp)
-                        .background(
-                            Brush.linearGradient(listOf(Color(0xFF9D8BFF), Color(0xFF62D9CE))),
-                            RoundedCornerShape(12.dp)
-                        ),
+                    modifier = Modifier.size(39.dp)
+                        .background(palette.surfaceAlt, RoundedCornerShape(14.dp))
+                        .border(1.dp, palette.outline.copy(alpha = 0.35f),
+                            RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "GoreeCloud Browser Mobile app mark",
-                        modifier = Modifier.size(31.dp)
+                        contentDescription = "GoreeCloud Browser Mobile",
+                        modifier = Modifier.size(35.dp)
                     )
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(11.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("GoreeCloud", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("BROWSER MOBILE", color = palette.muted, fontSize = 9.sp, letterSpacing = 2.sp)
+                    Text("GoreeCloud", color = palette.text, fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("BROWSER MOBILE", color = palette.muted,
+                        fontSize = 10.sp, letterSpacing = 1.4.sp)
                 }
-                // The privacy controls remain available from the overflow menu.
+                Row(
+                    modifier = Modifier.background(
+                        palette.surfaceAlt, RoundedCornerShape(99.dp)
+                    ).padding(horizontal = if (compactHeader) 8.dp else 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Shield,
+                        contentDescription = if (compactHeader) {
+                            if (preferences.blockAds) "Ad and tracker blocking on"
+                            else "Ad and tracker blocking off"
+                        } else null,
+                        tint = if (preferences.blockAds) palette.success else palette.muted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        when {
+                            !compactHeader && preferences.blockAds -> "Blocking on"
+                            !compactHeader -> "Blocking off"
+                            preferences.blockAds -> "On"
+                            else -> "Off"
+                        },
+                        color = palette.text, fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium, maxLines = 1
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
-                    .clip(RoundedCornerShape(19.dp))
+                    .shadow(3.dp, RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(palette.surface)
-                    .border(1.dp, palette.outline, RoundedCornerShape(19.dp)),
+                    .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                        RoundedCornerShape(18.dp)),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    if (current.surface == Surface.WEB) Icons.Default.Lock else Icons.Default.Search,
+                    if (current.surface == Surface.WEB) Icons.Default.Language else Icons.Default.Search,
                     contentDescription = null,
                     tint = palette.accent,
                     modifier = Modifier.padding(start = 15.dp).size(18.dp)
@@ -441,8 +484,12 @@ private fun BrowserApp(
                     value = address, onValueChange = { address = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Search privately or enter address", fontSize = 13.sp, color = palette.muted) },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = palette.text),
+                    placeholder = {
+                        Text("Search or enter address", fontSize = 14.sp,
+                            color = palette.muted, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                    },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = palette.text),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { openUrl(address) }),
                     colors = TextFieldDefaults.colors(
@@ -452,8 +499,9 @@ private fun BrowserApp(
                         cursorColor = palette.accent
                     )
                 )
-                IconButton(onClick = { openUrl(address) }, modifier = Modifier.size(46.dp)) {
-                    Icon(Icons.Default.ArrowForward, "Go", tint = palette.accent)
+                IconButton(onClick = { openUrl(address) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.ArrowForward, "Go to address or search",
+                        tint = palette.accent)
                 }
             }
             if (current.surface == Surface.WEB && current.loading) {
@@ -524,10 +572,14 @@ private fun BrowserApp(
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 7.dp)
-                    .background(palette.surface, RoundedCornerShape(26.dp))
-                    .border(1.dp, palette.outline, RoundedCornerShape(26.dp))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = if (configuration.screenWidthDp < 360) 8.dp
+                        else 16.dp, vertical = 9.dp)
+                    .shadow(12.dp, RoundedCornerShape(30.dp))
+                    .background(palette.surface, RoundedCornerShape(30.dp))
+                    .border(1.dp, palette.outline.copy(alpha = 0.35f),
+                        RoundedCornerShape(30.dp))
+                    .padding(horizontal = 5.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -557,13 +609,20 @@ private fun BrowserApp(
     }
 
     if (panel != null) {
+        // Privacy and Webspaces contain long, scrollable settings. Open them at
+        // full height so the first actionable controls are not hidden below a peek.
+        // The short tab switcher retains its smaller partial-height presentation.
+        val panelSheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = panel != Panel.TABS
+        )
         ModalBottomSheet(
             onDismissRequest = { panel = null },
+            sheetState = panelSheetState,
             containerColor = palette.surface, contentColor = palette.text
         ) {
             when (panel) {
                 Panel.TABS -> {
-                    SheetHeading("Your tabs", "${tabs.size} open · maximum 12", palette)
+                    SheetHeading("Your tabs", "${tabs.size} of 12 tabs · choose one to continue", palette)
                     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 7.dp)) {
                         items(tabs.toList(), key = { it.id }) { tab ->
                             Row(
@@ -571,22 +630,62 @@ private fun BrowserApp(
                                     .padding(bottom = 9.dp)
                                     .background(
                                         if (tab.id == activeId) palette.surfaceAlt else palette.canvas,
-                                        RoundedCornerShape(17.dp)
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .border(1.dp,
+                                        if (tab.id == activeId) palette.accent.copy(alpha = 0.58f)
+                                        else palette.outline.copy(alpha = 0.3f),
+                                        RoundedCornerShape(20.dp)
                                     )
                                     .clickable { activeId = tab.id; panel = null }
-                                    .padding(14.dp),
+                                    .padding(horizontal = 16.dp, vertical = 15.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Language, null, tint = palette.accent)
+                                Box(
+                                    modifier = Modifier.size(38.dp)
+                                        .background(palette.surface, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        when (tab.surface) {
+                                            Surface.WEB -> Icons.Default.Language
+                                            Surface.HOME -> Icons.Default.Home
+                                            Surface.NEW_TAB -> Icons.Default.Add
+                                        },
+                                        null, tint = palette.accent, modifier = Modifier.size(21.dp)
+                                    )
+                                }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(tab.title, color = palette.text, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            when (tab.surface) {
+                                                Surface.NEW_TAB -> "New Tab"
+                                                Surface.HOME -> "Home"
+                                                Surface.WEB -> tab.title.ifBlank { "Website" }
+                                            },
+                                            color = palette.text, maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (tab.id == activeId) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("ACTIVE", color = palette.accent,
+                                                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                     Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
-                                        ?: "Standard", color = palette.accent, fontSize = 10.sp)
-                                    Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
+                                        ?: "Standard", color = palette.accent, fontSize = 12.sp)
+                                    Text(
+                                        when (tab.surface) {
+                                            Surface.NEW_TAB -> "New tab page"
+                                            Surface.HOME -> "Your places"
+                                            Surface.WEB -> tab.url
+                                        },
                                         color = palette.muted, fontSize = 12.sp, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                                 IconButton(onClick = { closeTab(tab) }) {
                                     Icon(Icons.Default.Close, "Close tab", tint = palette.muted)
@@ -594,8 +693,18 @@ private fun BrowserApp(
                             }
                         }
                     }
-                    TextButton(onClick = { openNewTab() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
+                    Button(
+                        onClick = { openNewTab() }, enabled = tabs.size < 12,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)
+                            .heightIn(min = 50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = palette.accent, contentColor = palette.accentOn
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("New tab")
                     }
                 }
                 Panel.PRIVACY -> PrivacyPanel(
@@ -630,10 +739,9 @@ private fun DockButton(
     IconButton(
         onClick = action,
         enabled = enabled,
-        modifier = Modifier.size(47.dp).then(
+        modifier = Modifier.size(48.dp).then(
             if (accent) Modifier.background(
-                Brush.linearGradient(listOf(Color(0xFF8AA7FF), Color(0xFF7CE5D9))),
-                RoundedCornerShape(17.dp)
+                palette.accent, RoundedCornerShape(17.dp)
             ) else Modifier
         )
     ) {
@@ -643,7 +751,7 @@ private fun DockButton(
             modifier = Modifier.size(22.dp),
             tint = when {
                 !enabled -> palette.muted.copy(alpha = 0.38f)
-                accent -> Color(0xFF0B1736)
+                accent -> palette.accentOn
                 else -> palette.text
             }
         )
@@ -658,48 +766,45 @@ private fun NewTabPage(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Spacer(Modifier.height(28.dp))
-        Box(
-            modifier = Modifier.size(78.dp).background(
-                Brush.linearGradient(listOf(Color(0xFFA78AFF), Color(0xFF72E1DA))),
-                RoundedCornerShape(26.dp)
-            ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Add, null, tint = Color(0xFF101831), modifier = Modifier.size(38.dp))
-        }
-        Spacer(Modifier.height(25.dp))
-        Text(
-            "New beginnings.",
-            fontSize = 31.sp, lineHeight = 35.sp,
-            fontWeight = FontWeight.Bold, color = palette.text
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "An open canvas for your next curiosity.",
-            color = palette.muted, fontSize = 14.sp
-        )
-        Spacer(Modifier.height(33.dp))
+        Text("NEW TAB", color = palette.accent, fontSize = 11.sp,
+            letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(13.dp))
+        Text("Where to next?", fontSize = 32.sp, lineHeight = 38.sp,
+            fontWeight = FontWeight.Bold, color = palette.text,
+            modifier = Modifier.semantics { heading() })
+        Spacer(Modifier.height(6.dp))
+        Text("A fresh space for your next discovery.",
+            color = palette.muted, fontSize = 15.sp, lineHeight = 22.sp)
+        Spacer(Modifier.height(26.dp))
         Surface(
             color = palette.surface,
-            shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(1.dp, palette.outline),
+            shape = RoundedCornerShape(26.dp),
+            border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.38f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(22.dp)) {
+            Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, null, tint = palette.accent)
-                    Spacer(Modifier.width(10.dp))
-                    Text("Search the open web", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = palette.text)
+                    Box(
+                        modifier = Modifier.size(44.dp)
+                            .background(palette.surfaceAlt, RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Language, null, tint = palette.accent,
+                            modifier = Modifier.size(23.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Explore the open web", fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold, color = palette.text)
+                        Text("Powered by Startpage", color = palette.muted, fontSize = 12.sp)
+                    }
                 }
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(15.dp))
                 Text(
-                    "Startpage protects your searches while GoreeCloud Search is being stabilized.",
-                    color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp
+                    "Private search while GoreeCloud Search is being stabilized.",
+                    color = palette.muted, fontSize = 14.sp, lineHeight = 21.sp
                 )
                 Spacer(Modifier.height(17.dp))
                 Button(
@@ -708,29 +813,29 @@ private fun NewTabPage(
                         containerColor = palette.accent, contentColor = palette.accentOn
                     ),
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
                 ) {
-                    Text("Open Startpage", fontWeight = FontWeight.SemiBold)
+                    Text("Open Startpage", fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(18.dp))
                 }
             }
         }
-        Spacer(Modifier.height(29.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("A LITTLE INSPIRATION", color = palette.muted,
-                fontSize = 11.sp, letterSpacing = 1.7.sp)
-        }
-        Spacer(Modifier.height(13.dp))
+        Spacer(Modifier.height(30.dp))
+        Text("A LITTLE INSPIRATION", color = palette.muted, fontSize = 11.sp,
+            letterSpacing = 1.7.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
         SuggestionRow("Discover something new", "the history of the internet", palette, openUrl)
         SuggestionRow("Explore the universe", "latest space discoveries", palette, openUrl)
-        SuggestionRow("Learn one new thing", "science breakthroughs", palette, openUrl)
-        Spacer(Modifier.height(24.dp))
-        TextButton(onClick = onHome) {
+        SuggestionRow("Learn something today", "science breakthroughs", palette, openUrl)
+        Spacer(Modifier.height(18.dp))
+        TextButton(onClick = onHome, modifier = Modifier.align(Alignment.CenterHorizontally)) {
             Icon(Icons.Default.Home, null, tint = palette.accent, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Visit your Home", color = palette.accent)
         }
+        Spacer(Modifier.height(18.dp))
     }
 }
 
@@ -743,14 +848,16 @@ private fun SuggestionRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
-            .background(palette.surfaceAlt.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
+            .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
             .clickable { openUrl(query) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Default.Search, null, tint = palette.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
-        Text(title, color = palette.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(title, color = palette.text, fontSize = 14.sp,
+            modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
         Icon(Icons.Default.ArrowForward, null, tint = palette.muted, modifier = Modifier.size(18.dp))
     }
 }
@@ -769,18 +876,33 @@ private fun HomePage(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 19.dp, vertical = 12.dp)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
         val today = remember {
             LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d"))
         }
-        Text(today.uppercase(), color = palette.muted, letterSpacing = 1.8.sp, fontSize = 10.sp)
-        Spacer(Modifier.height(8.dp))
+        Text(today.uppercase(), color = palette.muted,
+            letterSpacing = 1.5.sp, fontSize = 11.sp)
+        Spacer(Modifier.height(17.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Your places", fontSize = 29.sp, lineHeight = 34.sp,
+                fontWeight = FontWeight.Bold, color = palette.text,
+                modifier = Modifier.weight(1f).semantics { heading() })
+            Text("ON THIS DEVICE", fontSize = 10.sp, letterSpacing = 1.sp,
+                color = palette.muted)
+        }
+        Spacer(Modifier.height(15.dp))
+        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
+        Spacer(Modifier.height(23.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Privacy at a glance", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = palette.text, modifier = Modifier.weight(1f))
-            TextButton(onClick = onPrivacy) { Text("Manage", color = palette.accent) }
+            TextButton(onClick = onPrivacy) {
+                Text("Manage", color = palette.accent,
+                    fontWeight = FontWeight.SemiBold)
+            }
         }
+        Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrivacyStat(
                 modifier = Modifier.weight(1f),
@@ -792,14 +914,12 @@ private fun HomePage(
             PrivacyStat(
                 modifier = Modifier.weight(1f),
                 count = cleaned.toString(),
-                name = "Trackers removed",
+                name = "Tracking fields removed",
                 icon = Icons.Default.Lock,
                 palette = palette
             )
         }
-        Spacer(Modifier.height(27.dp))
-        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
-        Spacer(Modifier.height(25.dp))
+        Spacer(Modifier.height(30.dp))
     }
 }
 
@@ -813,22 +933,25 @@ private fun PrivacyStat(
 ) {
     Column(
         modifier = modifier.background(palette.surface, RoundedCornerShape(22.dp))
-            .border(1.dp, palette.outline, RoundedCornerShape(22.dp))
+            .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                RoundedCornerShape(22.dp))
             .padding(17.dp)
     ) {
         Icon(icon, null, tint = palette.success, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(13.dp))
         Text(count, color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-        Text(name, color = palette.muted, fontSize = 11.sp)
+        Text(name, color = palette.muted, fontSize = 12.sp,
+            lineHeight = 16.sp)
     }
 }
 
 @Composable
 private fun SheetHeading(title: String, subtitle: String, palette: GcPalette) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
-        Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = palette.text)
-        Spacer(Modifier.height(3.dp))
-        Text(subtitle, fontSize = 12.sp, color = palette.muted)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+        Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = palette.text,
+            lineHeight = 33.sp, modifier = Modifier.semantics { heading() })
+        Spacer(Modifier.height(4.dp))
+        Text(subtitle, fontSize = 14.sp, color = palette.muted, lineHeight = 20.sp)
     }
 }
 
@@ -838,12 +961,38 @@ private fun SheetAction(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = action)
-            .padding(horizontal = 24.dp, vertical = 15.dp),
+            .heightIn(min = 52.dp).padding(horizontal = 24.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, modifier = Modifier.size(21.dp), tint = palette.accent)
         Spacer(Modifier.width(17.dp))
         Text(label, fontSize = 15.sp, color = palette.text)
+    }
+}
+
+@Composable
+private fun PrivacySectionHeading(
+    icon: ImageVector, title: String, description: String, palette: GcPalette
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(38.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(13.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = palette.text, fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.semantics { heading() })
+            Text(description, color = palette.muted,
+                fontSize = 12.sp, lineHeight = 18.sp)
+        }
     }
 }
 
@@ -856,18 +1005,22 @@ private fun PrivacyToggle(
     onChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 23.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .heightIn(min = 56.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onChange)
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = palette.text, fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(3.dp))
-            Text(subtitle, color = palette.muted, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(title, color = palette.text, fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold, lineHeight = 21.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp)
         }
         Spacer(Modifier.width(16.dp))
         Switch(
-            checked = enabled, onCheckedChange = onChange,
+            checked = enabled, onCheckedChange = null,
             colors = SwitchDefaults.colors(
                 checkedTrackColor = palette.accent,
                 checkedThumbColor = palette.accentOn
@@ -888,22 +1041,30 @@ private fun PrivacyPanel(
     icons: SiteIcons
 ) {
     val message = remember { mutableStateOf("") }
+    var confirmHistoryClear by remember { mutableStateOf(false) }
+    var confirmHistoryDisable by remember { mutableStateOf(false) }
+    var confirmCookiesClear by remember { mutableStateOf(false) }
+    var showFilterSubscriptions by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
         Row(
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp)
-                .fillMaxWidth().background(palette.surfaceAlt, RoundedCornerShape(20.dp))
-                .padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 9.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(20.dp))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column {
-                Text("${tab.blocked}", color = palette.text, fontSize = 22.sp,
+            Column(Modifier.weight(1f)) {
+                Text("${tab.blocked}", color = palette.text, fontSize = 25.sp,
                     fontWeight = FontWeight.Bold)
-                Text("Blocked on this tab", color = palette.muted, fontSize = 11.sp)
+                Text("Blocked on this tab", color = palette.muted,
+                    fontSize = 12.sp, lineHeight = 18.sp)
             }
-            Column {
-                Text("$cleanedCount", color = palette.text, fontSize = 22.sp,
+            Column(Modifier.weight(1f)) {
+                Text("$cleanedCount", color = palette.text, fontSize = 25.sp,
                     fontWeight = FontWeight.Bold)
-                Text("Tracking fields removed", color = palette.muted, fontSize = 11.sp)
+                Text("Tracking fields removed", color = palette.muted,
+                    fontSize = 12.sp, lineHeight = 18.sp)
             }
         }
         PrivacyToggle(
@@ -939,57 +1100,64 @@ private fun PrivacyPanel(
             "Remember visited websites",
             "Keeps up to 100 website hosts locally for Recent and Most Visited; no URLs or search terms.",
             library.historyEnabled, palette, { enabled ->
-                library.updateHistoryEnabled(enabled)
-                if (!enabled) {
-                    library.clear()
-                    icons.clear()
-                    message.value = "Local website history and favicons cleared"
-                }
+                if (enabled) library.updateHistoryEnabled(true)
+                else confirmHistoryDisable = true
             }
         )
         SheetAction(Icons.Default.Delete, "Clear recent websites and favicons", palette) {
-            library.clear()
-            icons.clear()
-            message.value = "Local website history and saved favicons cleared"
+            confirmHistoryClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("FILTER SUBSCRIPTIONS", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
-        Text(
-            "OISD Small + StevenBlack Unified are the default pair. Other lists are opt-in. " +
-                "Downloaded rules stay on this device and apply to page subresources only.",
-            color = palette.muted, fontSize = 12.sp, lineHeight = 17.sp,
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 10.dp)
+        PrivacySectionHeading(
+            Icons.Default.Shield, "Filter subscriptions",
+            "OISD Small and StevenBlack Unified are the defaults. Other lists are optional. " +
+                "Saved rules stay on-device and filter WebView subresources only.",
+            palette
         )
-        FilterSource.entries.forEach { source ->
-            val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
-            val readiness = when {
-                !state.enabled -> "Off"
-                state.updating && !state.hasCache -> "Downloading…"
-                state.updateFailed && state.hasCache -> "Using saved list · update failed"
-                state.updateFailed -> "Unavailable · retry download"
-                state.hasCache -> state.domains.toString() + " domains loaded"
-                else -> "Waiting for first download"
-            }
-            PrivacyToggle(
-                source.title,
-                source.summary + " · " + readiness,
-                state.enabled, palette,
-                { enabled -> filterLists.setEnabled(source, enabled) }
-            )
-        }
         Text(
             filterLists.activeRuleCount.toString() + " active domains · " +
-                preferences.siteExceptionHosts.size + " site exceptions. Some ads cannot be blocked.",
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp),
-            color = palette.muted, fontSize = 12.sp
+                preferences.siteExceptionHosts.size + " site exceptions. " +
+                "Some ads cannot be blocked.",
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
+            color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp
         )
-        SheetAction(Icons.Default.Refresh, "Update enabled lists now", palette) {
-            filterLists.refresh(force = true)
+        TextButton(
+            onClick = { showFilterSubscriptions = !showFilterSubscriptions },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                .heightIn(min = 48.dp)
+        ) {
+            Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (showFilterSubscriptions) "Hide filter lists"
+                else "Manage filter lists")
+        }
+        if (showFilterSubscriptions) {
+            FilterSource.entries.forEach { source ->
+                val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
+                val readiness = when {
+                    !state.enabled -> "Off"
+                    state.updating && !state.hasCache -> "Downloading…"
+                    state.updateFailed && state.hasCache -> "Using saved list · update failed"
+                    state.updateFailed -> "Unavailable · retry download"
+                    state.hasCache -> state.domains.toString() + " domains loaded"
+                    else -> "Waiting for first download"
+                }
+                PrivacyToggle(
+                    source.title,
+                    source.summary + " · " + readiness,
+                    state.enabled, palette,
+                    { enabled -> filterLists.setEnabled(source, enabled) }
+                )
+            }
+            SheetAction(Icons.Default.Refresh, "Update enabled lists now", palette) {
+                filterLists.refresh(force = true)
+            }
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("COOKIES & SITE DATA", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
+        PrivacySectionHeading(
+            Icons.Default.Lock, "Cookies & site data",
+            "Control cookies stored by Android WebView.", palette
+        )
         PrivacyToggle(
             "Accept cookies",
             "WebView cookie storage for sites you visit.",
@@ -1001,20 +1169,14 @@ private fun PrivacyPanel(
             preferences.thirdPartyCookies, palette, preferences::updateThirdPartyCookies
         )
         SheetAction(Icons.Default.Delete, "Clear all cookies and web storage", palette) {
-            CookieManager.getInstance().removeAllCookies {
-                CookieManager.getInstance().flush()
-                WebStorage.getInstance().deleteAllData()
-                message.value = "Cookies and web storage cleared"
-            }
+            confirmCookiesClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("DNS MANAGER", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
-        Text(
-            "Android WebView uses system DNS. Configure Private DNS in Android settings; " +
-                "per-browser DNS-over-HTTPS is not available in this version.",
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 10.dp),
-            color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp
+        PrivacySectionHeading(
+            Icons.Default.Settings, "DNS settings",
+            "Android WebView uses system DNS. This version does not provide a " +
+                "separate browser DNS-over-HTTPS resolver.",
+            palette
         )
         SheetAction(Icons.Default.Settings, "Open Android Private DNS settings", palette) {
             try {
@@ -1028,6 +1190,71 @@ private fun PrivacyPanel(
                 fontSize = 12.sp)
         }
         Spacer(Modifier.height(32.dp))
+    }
+    if (confirmHistoryDisable) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryDisable = false },
+            title = { Text("Turn off visited websites?") },
+            text = {
+                Text("Turning off this feature also clears recent and most-visited " +
+                    "website hosts and saved favicons from this device. Bookmarks remain.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.updateHistoryEnabled(false)
+                    library.clear()
+                    icons.clear()
+                    message.value = "Visited websites disabled; local history and favicons cleared"
+                    confirmHistoryDisable = false
+                }) { Text("Turn off & clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryDisable = false }) { Text("Cancel") }
+            }
+        )
+    }
+    if (confirmHistoryClear) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryClear = false },
+            title = { Text("Clear recent websites?") },
+            text = {
+                Text("This removes the local recent and most-visited list and saved favicons. " +
+                    "It will not delete bookmarks.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.clear()
+                    icons.clear()
+                    message.value = "Local website history and saved favicons cleared"
+                    confirmHistoryClear = false
+                }) { Text("Clear history") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryClear = false }) { Text("Cancel") }
+            }
+        )
+    }
+    if (confirmCookiesClear) {
+        AlertDialog(
+            onDismissRequest = { confirmCookiesClear = false },
+            title = { Text("Clear cookies and site data?") },
+            text = {
+                Text("This signs you out of some sites and deletes WebView cookies and web storage.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCookiesClear = false
+                    CookieManager.getInstance().removeAllCookies {
+                        CookieManager.getInstance().flush()
+                        WebStorage.getInstance().deleteAllData()
+                        message.value = "Cookies and web storage cleared"
+                    }
+                }) { Text("Clear site data") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCookiesClear = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -1050,14 +1277,26 @@ private fun QuickDestinations(
         ).take(8)
     }
     Text("Quick destinations", fontSize = 20.sp,
-        fontWeight = FontWeight.Bold, color = palette.text)
+        fontWeight = FontWeight.Bold, color = palette.text,
+        modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
         listOf(DestinationMode.RECENT to "Recent",
             DestinationMode.FAVORITES to "Favorites",
             DestinationMode.MOST to "Most visited").forEach { (option, label) ->
-            FilterChip(selected = mode == option, onClick = { mode = option },
-                label = { Text(label, fontSize = 11.sp) })
+            FilterChip(
+                selected = mode == option, onClick = { mode = option },
+                label = { Text(label, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = palette.surfaceAlt,
+                    selectedLabelColor = palette.text,
+                    containerColor = palette.canvas,
+                    labelColor = palette.muted
+                )
+            )
         }
     }
     Spacer(Modifier.height(9.dp))
@@ -1070,17 +1309,22 @@ private fun QuickDestinations(
             modifier = Modifier.fillMaxWidth().padding(vertical = 17.dp)
         )
     }
-    sites.chunked(2).forEach { pair ->
+    // At high text scales or narrow windows, avoid squeezing two site names into one row.
+    val oneColumn = LocalConfiguration.current.screenWidthDp < 350 ||
+        LocalDensity.current.fontScale >= 1.45f
+    sites.chunked(if (oneColumn) 1 else 2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
             pair.forEach { site ->
                 val favicon = remember(site.host, faviconRevision) { icons.load(site.host) }
                 Column(
                     modifier = Modifier.weight(1f)
-                        .background(palette.surface, RoundedCornerShape(19.dp))
-                        .border(1.dp, palette.outline, RoundedCornerShape(19.dp))
+                        .background(palette.surface, RoundedCornerShape(20.dp))
+                        .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                            RoundedCornerShape(20.dp))
                         .clickable { openUrl(site.url) }
-                        .padding(14.dp)
+                        .heightIn(min = 115.dp)
+                        .padding(15.dp)
                 ) {
                     if (favicon != null) {
                         Image(bitmap = favicon.asImageBitmap(),
@@ -1091,13 +1335,13 @@ private fun QuickDestinations(
                             tint = palette.accent, modifier = Modifier.size(31.dp))
                     }
                     Spacer(Modifier.height(9.dp))
-                    Text(site.host, color = palette.text, fontSize = 13.sp,
+                    Text(site.host, color = palette.text, fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                     Text(if (site.visits == 1) "1 visit"
                          else if (site.visits > 1) site.visits.toString() + " visits"
                          else "Bookmarked",
-                        color = palette.muted, fontSize = 11.sp,
+                        color = palette.muted, fontSize = 12.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -1108,7 +1352,7 @@ private fun QuickDestinations(
 
 @Composable
 private fun TabCountDock(count: Int, palette: GcPalette, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(47.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         Box(contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Tab, contentDescription = "Tabs: $count",
                 modifier = Modifier.size(28.dp), tint = palette.text)
@@ -1126,56 +1370,143 @@ private fun WebspacesPanel(
     open: (String) -> Unit, onRemove: (String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var pendingRemove by remember { mutableStateOf<com.goreecloud.browsermobile.core.WebspaceEntry?>(null) }
+    val canCreate = com.goreecloud.browsermobile.core.WebspacePolicy.validName(name) &&
+        webspaces.custom.size < 10 &&
+        webspaces.entries.none { it.name.equals(name.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Webspaces", "Organize tabs and route sites", palette)
-        Text("Tab groups currently share WebView cookies; accounts are not isolated.",
-            color = palette.muted, fontSize = 12.sp,
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 12.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
+                .padding(15.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(Icons.Default.Lock, null, tint = palette.accent,
+                modifier = Modifier.size(19.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Webspaces organize tabs but share WebView cookies. " +
+                "Website accounts are not isolated.",
+                color = palette.text, fontSize = 13.sp, lineHeight = 19.sp)
+        }
         webspaces.entries.forEach { space ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 4.dp)
-                    .background(palette.surfaceAlt, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
+            val isCurrent = current.webspaceId == space.id
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 19.dp, vertical = 5.dp)
+                    .background(
+                        if (isCurrent) palette.surfaceAlt else palette.surface,
+                        RoundedCornerShape(18.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (isCurrent) palette.accent.copy(alpha = 0.65f)
+                        else palette.outline.copy(alpha = 0.38f),
+                        RoundedCornerShape(18.dp)
+                    )
             ) {
-                Icon(Icons.Default.Language, null, tint = palette.accent)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f).clickable { open(space.id) }
-                    .padding(vertical = 10.dp)) {
-                    Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold)
-                    val count = tabs.count { it.webspaceId == space.id }
-                    Text(count.toString() + if (count == 1) " tab · Open" else " tabs · Open",
-                        color = palette.muted, fontSize = 11.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { open(space.id) }
+                        .heightIn(min = 70.dp)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier.size(38.dp)
+                            .background(palette.surface, RoundedCornerShape(13.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Language, null,
+                            tint = palette.accent, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(space.name, color = palette.text,
+                            fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        val count = tabs.count { it.webspaceId == space.id }
+                        Text(count.toString() + if (count == 1) " tab" else " tabs",
+                            color = palette.muted, fontSize = 12.sp)
+                        if (isCurrent) {
+                            Text("CURRENT WEBSPACE", color = palette.accent,
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (space.id.startsWith("custom-")) {
+                        IconButton(onClick = { pendingRemove = space }) {
+                            Icon(Icons.Default.Delete,
+                                "Remove " + space.name + " Webspace", tint = palette.muted)
+                        }
+                    } else {
+                        Icon(Icons.Default.ArrowForward, null,
+                            tint = palette.muted, modifier = Modifier.size(18.dp))
+                    }
                 }
                 if (current.surface == Surface.WEB) {
-                    IconButton(onClick = {
-                        current.webspaceId = space.id
-                        current.pinnedWebspace = true
-                    }) {
-                        Icon(Icons.Default.ArrowForward,
-                            "Move current tab to " + space.name, tint = palette.accent)
-                    }
-                    TextButton(onClick = {
-                        webspaces.assign(current.url, space.id)
-                        current.webspaceId = space.id
-                        current.pinnedWebspace = false
-                    }) { Text("Route", fontSize = 11.sp) }
-                }
-                if (space.id.startsWith("custom-")) {
-                    IconButton(onClick = { onRemove(space.id) }) {
-                        Icon(Icons.Default.Delete, "Remove Webspace", tint = palette.muted)
+                    HorizontalDivider(
+                        color = palette.outline.copy(alpha = 0.28f),
+                        modifier = Modifier.padding(horizontal = 14.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                current.webspaceId = space.id
+                                current.pinnedWebspace = true
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        ) {
+                            Text("Move tab", color = palette.accent,
+                                fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(
+                            onClick = {
+                                webspaces.assign(current.url, space.id)
+                                current.webspaceId = space.id
+                                current.pinnedWebspace = false
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        ) {
+                            Text("Route site", color = palette.accent,
+                                fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = name, onValueChange = { name = it.take(30) },
-                label = { Text("Custom Webspace") }, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { if (webspaces.create(name) != null) name = "" }) {
-                Text("Add")
-            }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 16.dp)) {
+            OutlinedTextField(
+                value = name, onValueChange = { name = it.take(30) },
+                label = { Text("Custom Webspace") },
+                singleLine = true,
+                isError = name.isNotBlank() && !canCreate,
+                supportingText = {
+                    Text(
+                        when {
+                            webspaces.custom.size >= 10 -> "Maximum 10 custom Webspaces."
+                            name.isNotBlank() && !canCreate ->
+                                "Use a unique name with 2–30 characters."
+                            else -> "Custom spaces organize tabs; they do not isolate accounts."
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = { if (webspaces.create(name) != null) name = "" },
+                enabled = canCreate,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.accent, contentColor = palette.accentOn
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Add Webspace") }
         }
         if (current.surface == Surface.WEB &&
             VisitPolicy.host(current.url) in webspaces.assignments) {
@@ -1188,6 +1519,25 @@ private fun WebspacesPanel(
             ) { Text("Remove this site's routing rule") }
         }
         Spacer(Modifier.height(24.dp))
+    }
+    pendingRemove?.let { space ->
+        AlertDialog(
+            onDismissRequest = { pendingRemove = null },
+            title = { Text("Remove " + space.name + "?") },
+            text = {
+                Text("This removes the Webspace and its site routing rules. Open tabs " +
+                    "in it move back to Standard. Website cookies are not deleted.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(space.id)
+                    pendingRemove = null
+                }) { Text("Remove Webspace") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemove = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
