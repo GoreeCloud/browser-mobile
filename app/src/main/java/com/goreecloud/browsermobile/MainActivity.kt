@@ -972,12 +972,12 @@ private fun PrivacyPanel(
         PrivacyToggle(
             "Built-in ad & tracker blocking",
             "Conservative request-domain list. Not cosmetic filtering.",
-            preferences.blockAds, palette, preferences::setBlockAds
+            preferences.blockAds, palette, preferences::updateBlockAds
         )
         PrivacyToggle(
             "URL cleaner",
             "Removes recognized marketing parameters from links.",
-            preferences.cleanUrls, palette, preferences::setCleanUrls
+            preferences.cleanUrls, palette, preferences::updateCleanUrls
         )
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         Text("COOKIES & SITE DATA", color = palette.muted, fontSize = 10.sp,
@@ -985,12 +985,12 @@ private fun PrivacyPanel(
         PrivacyToggle(
             "Accept cookies",
             "WebView cookie storage for sites you visit.",
-            preferences.acceptCookies, palette, preferences::setAcceptCookies
+            preferences.acceptCookies, palette, preferences::updateAcceptCookies
         )
         PrivacyToggle(
             "Third-party cookies",
             "Off by default; can break some sign-ins.",
-            preferences.thirdPartyCookies, palette, preferences::setThirdPartyCookies
+            preferences.thirdPartyCookies, palette, preferences::updateThirdPartyCookies
         )
         SheetAction(Icons.Default.Delete, "Clear all cookies and web storage", palette) {
             CookieManager.getInstance().removeAllCookies {

@@ -23,23 +23,23 @@ class BrowserPreferences(context: Context) {
 
     init { CookieManager.getInstance().setAcceptCookie(acceptCookies) }
 
-    fun setBlockAds(enabled: Boolean) {
+    fun updateBlockAds(enabled: Boolean) {
         blockAds = enabled
         storage.edit().putBoolean("block_ads", enabled).apply()
     }
 
-    fun setCleanUrls(enabled: Boolean) {
+    fun updateCleanUrls(enabled: Boolean) {
         cleanUrls = enabled
         storage.edit().putBoolean("clean_urls", enabled).apply()
     }
 
-    fun setAcceptCookies(enabled: Boolean) {
+    fun updateAcceptCookies(enabled: Boolean) {
         acceptCookies = enabled
         CookieManager.getInstance().setAcceptCookie(enabled)
         storage.edit().putBoolean("accept_cookies", enabled).apply()
     }
 
-    fun setThirdPartyCookies(enabled: Boolean) {
+    fun updateThirdPartyCookies(enabled: Boolean) {
         thirdPartyCookies = enabled
         storage.edit().putBoolean("third_party_cookies", enabled).apply()
     }
