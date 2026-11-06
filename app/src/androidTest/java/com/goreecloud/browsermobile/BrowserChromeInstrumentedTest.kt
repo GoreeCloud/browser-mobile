@@ -46,6 +46,20 @@ class BrowserChromeInstrumentedTest {
     }
 
     @Test
+    fun recentWebsiteClearCanBeCancelledWithoutDeletingData() {
+        composeRule.onNodeWithContentDescription("Home").performClick()
+        composeRule.onNodeWithText("Manage").performScrollTo().performClick()
+
+        composeRule.onNodeWithText("Clear recent websites and favicons")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithText("Clear recent websites?").assertExists()
+
+        // Cancel must dismiss the confirmation without invoking library.clear().
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onNodeWithText("Clear recent websites?").assertDoesNotExist()
+    }
+
+    @Test
     fun optionalPrivacyFiltersRemainDiscoverable() {
         composeRule.onNodeWithContentDescription("Home").performClick()
         composeRule.onNodeWithText("Manage").performScrollTo().performClick()
