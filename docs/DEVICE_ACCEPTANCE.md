@@ -51,3 +51,49 @@ The same authorized OnePlus N200 / Android 16 handset received an **in-place upg
 - One-device screenshots are visual smoke evidence, not a comprehensive accessibility, privacy, site routing or Android-version matrix.
 
 No new images were generated for the redesign. **Product-specific official Browser Mobile logo/icon/artwork is still missing from the central brand-assets catalog**; the existing Android launcher vector was reused only. The retained debug app is not a production-ready release.
+
+
+## November 6 GC UI review branch — pending visual and interaction acceptance
+
+**Scope:** [Draft browser UI PR #1](https://github.com/GoreeCloud/browser-mobile/pull/1) on
+`ui/compose-visual-refinement-20261106`. This section is an **acceptance checklist**,
+not evidence that the branch has been installed, rendered, or accepted on hardware.
+The older device observations above refer to preceding code and do not verify this PR.
+
+The review branch changes the native header/omnibox/dock, Home/New Tab hierarchy,
+destination chips and tiles, tab switcher, Privacy Center, and Webspaces. It maps
+light/dark palette roles to the canonical GC UI v1 Iris tokens and retains
+Startpage as the sole configured search provider. The newer accessibility
+follow-up makes full privacy-toggle rows clickable, adapts the header on small
+screens, allows horizontal scrolling of destination chips, switches to
+single-column website tiles at narrow widths/high font scales, and adds
+confirmation before disabling history or removing a custom Webspace.
+
+### Required device test matrix
+
+| Dimension | Test cases | Pass criteria |
+| --- | --- | --- |
+| Viewport | narrow ~320dp, typical ~360–412dp, landscape | No inaccessible clipped control, navigation bar overlap, or unexpected horizontal page scrolling |
+| Text scale | system font scale 1.0, 1.3, 1.6, 2.0 | Headings wrap, privacy descriptions remain readable, all toggles/actions remain reachable |
+| Appearance | light and dark | GC UI semantic foregrounds remain legible; status/navigation bar icon contrast correct |
+| New Tab vs Home | launch, +, Home, Back, switch tabs | Clearly distinct surfaces; search remains Startpage; controls work as labeled |
+| Search/chrome | typing/IME Go, HTTPS navigation, long URL, loading, failure | Typed text visible, non-truncated function, no fake HTTPS/security indicators |
+| Quick destinations | Recent/Favorites/Most visited, empty/1/8 hosts | Horizontal chips reachable; tiles present site identity, counts and URL navigation |
+| Tabs | 1, 2, 12; active tab; close last; close inactive | Active state obvious; disabled New Tab at 12; no lost active-tab state |
+| Privacy Center | filter on/off, URL cleaner, cookies, site exceptions, DNS shortcut | Accurate state text; entire setting row activates one switch without double toggles; unsupported DNS is plainly disclosed |
+| Clearing data | disable visited hosts, clear visited hosts, clear cookies | Confirmation and Cancel behavior; only confirmed action erases intended data |
+| Webspaces | built-in/custom, move/route, remove custom | Current tab routing is correct; removal confirmation explains tabs/rules; cookie-isolation warning remains visible |
+| Accessibility | TalkBack, switch focus, external keyboard, 48dp touch targets | Every actionable element has understandable name, role, state and predictable focus order |
+
+### Safety and evidence requirements
+
+- Confirm target device ownership and obtain any required approval **before** app installation,
+  debug package updates, device configuration changes, or access to app-private data.
+- Verify debug signature compatibility prior to an upgrade. A CI-built debug APK may
+  have a different signing key from the locally installed one.
+- Collect screenshots of all six relevant surfaces without exposing browsing data,
+  accounts, addresses, notifications, or other personal information.
+- Record device model/API/build SHA, exact test conditions, defects, and cleanup.
+  Re-run CI and relevant behavioral tests after any corrective source commit.
+- This checklist does not certify WCAG, WebView security guarantees, full adblocking,
+  Android-version parity, Stable readiness, deployment, or release.
