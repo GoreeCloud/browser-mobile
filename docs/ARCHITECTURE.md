@@ -7,6 +7,7 @@
 - `core/BrowserPreferences.kt`: app-private preference, bookmark and site-exception persistence; WebView CookieManager toggles.
 - `core/SiteExceptions.kt`: exact-host, HTTP(S)-only per-site filter exceptions with no automatic subdomain exemptions.
 - Android WebView is the system website renderer, **not** an independently maintained browser engine.
+- Browser app data is app-private. The manifest disables Android Auto Backup, and `res/xml/data_extraction_rules.xml` excludes all browser data from Android 12+ cloud backup and device-to-device transfer. Both platform and OEM behavior still require device validation.
 
 ## Key trust boundaries
 
