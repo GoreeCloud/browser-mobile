@@ -925,6 +925,31 @@ private fun SheetAction(
 }
 
 @Composable
+private fun PrivacySectionHeading(
+    icon: ImageVector, title: String, description: String, palette: GcPalette
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(38.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(13.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = palette.accent, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = palette.text, fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold)
+            Text(description, color = palette.muted,
+                fontSize = 12.sp, lineHeight = 18.sp)
+        }
+    }
+}
+
+@Composable
 private fun PrivacyToggle(
     title: String,
     subtitle: String,
@@ -933,14 +958,16 @@ private fun PrivacyToggle(
     onChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 23.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 13.dp)
+            .heightIn(min = 50.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = palette.text, fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(3.dp))
-            Text(subtitle, color = palette.muted, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(title, color = palette.text, fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold, lineHeight = 21.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp)
         }
         Spacer(Modifier.width(16.dp))
         Switch(
@@ -965,6 +992,8 @@ private fun PrivacyPanel(
     icons: SiteIcons
 ) {
     val message = remember { mutableStateOf("") }
+    var confirmHistoryClear by remember { mutableStateOf(false) }
+    var confirmCookiesClear by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
         Row(
@@ -1025,18 +1054,14 @@ private fun PrivacyPanel(
             }
         )
         SheetAction(Icons.Default.Delete, "Clear recent websites and favicons", palette) {
-            library.clear()
-            icons.clear()
-            message.value = "Local website history and saved favicons cleared"
+            confirmHistoryClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("FILTER SUBSCRIPTIONS", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
-        Text(
-            "OISD Small + StevenBlack Unified are the default pair. Other lists are opt-in. " +
-                "Downloaded rules stay on this device and apply to page subresources only.",
-            color = palette.muted, fontSize = 12.sp, lineHeight = 17.sp,
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 10.dp)
+        PrivacySectionHeading(
+            Icons.Default.Shield, "Filter subscriptions",
+            "OISD Small and StevenBlack Unified are the defaults. Other lists are optional. " +
+                "Saved rules stay on-device and filter WebView subresources only.",
+            palette
         )
         FilterSource.entries.forEach { source ->
             val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
@@ -1065,8 +1090,10 @@ private fun PrivacyPanel(
             filterLists.refresh(force = true)
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("COOKIES & SITE DATA", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
+        PrivacySectionHeading(
+            Icons.Default.Lock, "Cookies & site data",
+            "Control cookies stored by Android WebView.", palette
+        )
         PrivacyToggle(
             "Accept cookies",
             "WebView cookie storage for sites you visit.",
@@ -1078,20 +1105,14 @@ private fun PrivacyPanel(
             preferences.thirdPartyCookies, palette, preferences::updateThirdPartyCookies
         )
         SheetAction(Icons.Default.Delete, "Clear all cookies and web storage", palette) {
-            CookieManager.getInstance().removeAllCookies {
-                CookieManager.getInstance().flush()
-                WebStorage.getInstance().deleteAllData()
-                message.value = "Cookies and web storage cleared"
-            }
+            confirmCookiesClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("DNS MANAGER", color = palette.muted, fontSize = 10.sp,
-            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
-        Text(
-            "Android WebView uses system DNS. Configure Private DNS in Android settings; " +
-                "per-browser DNS-over-HTTPS is not available in this version.",
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 10.dp),
-            color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp
+        PrivacySectionHeading(
+            Icons.Default.Settings, "DNS settings",
+            "Android WebView uses system DNS. This version does not provide a " +
+                "separate browser DNS-over-HTTPS resolver.",
+            palette
         )
         SheetAction(Icons.Default.Settings, "Open Android Private DNS settings", palette) {
             try {
@@ -1105,6 +1126,49 @@ private fun PrivacyPanel(
                 fontSize = 12.sp)
         }
         Spacer(Modifier.height(32.dp))
+    }
+    if (confirmHistoryClear) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryClear = false },
+            title = { Text("Clear recent websites?") },
+            text = {
+                Text("This removes the local recent and most-visited list and saved favicons. " +
+                    "It will not delete bookmarks.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.clear()
+                    icons.clear()
+                    message.value = "Local website history and saved favicons cleared"
+                    confirmHistoryClear = false
+                }) { Text("Clear history") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryClear = false }) { Text("Cancel") }
+            }
+        )
+    }
+    if (confirmCookiesClear) {
+        AlertDialog(
+            onDismissRequest = { confirmCookiesClear = false },
+            title = { Text("Clear cookies and site data?") },
+            text = {
+                Text("This signs you out of some sites and deletes WebView cookies and web storage.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCookiesClear = false
+                    CookieManager.getInstance().removeAllCookies {
+                        CookieManager.getInstance().flush()
+                        WebStorage.getInstance().deleteAllData()
+                        message.value = "Cookies and web storage cleared"
+                    }
+                }) { Text("Clear site data") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCookiesClear = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -1215,24 +1279,36 @@ private fun WebspacesPanel(
     var name by remember { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Webspaces", "Organize tabs and route sites", palette)
-        Text("Tab groups currently share WebView cookies; accounts are not isolated.",
-            color = palette.muted, fontSize = 12.sp,
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 12.dp)
+                .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
+                .padding(15.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(Icons.Default.Lock, null, tint = palette.accent,
+                modifier = Modifier.size(19.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("Webspaces organize tabs, but share Android WebView cookies. " +
+                "They do not isolate website accounts.",
+                color = palette.text, fontSize = 13.sp, lineHeight = 19.sp)
+        }
         webspaces.entries.forEach { space ->
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 4.dp)
-                    .background(palette.surfaceAlt, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 5.dp)
+                    .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
+                    .clickable { open(space.id) }
+                    .heightIn(min = 70.dp)
+                    .padding(horizontal = 15.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Default.Language, null, tint = palette.accent)
                 Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f).clickable { open(space.id) }
-                    .padding(vertical = 10.dp)) {
-                    Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold)
+                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp)
                     val count = tabs.count { it.webspaceId == space.id }
-                    Text(count.toString() + if (count == 1) " tab · Open" else " tabs · Open",
-                        color = palette.muted, fontSize = 11.sp)
+                    Text(count.toString() + if (count == 1) " tab" else " tabs",
+                        color = palette.muted, fontSize = 12.sp)
                 }
                 if (current.surface == Surface.WEB) {
                     IconButton(onClick = {
