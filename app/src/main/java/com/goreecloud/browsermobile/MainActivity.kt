@@ -609,8 +609,15 @@ private fun BrowserApp(
     }
 
     if (panel != null) {
+        // Privacy and Webspaces contain long, scrollable settings. Open them at
+        // full height so the first actionable controls are not hidden below a peek.
+        // The short tab switcher retains its smaller partial-height presentation.
+        val panelSheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = panel != Panel.TABS
+        )
         ModalBottomSheet(
             onDismissRequest = { panel = null },
+            sheetState = panelSheetState,
             containerColor = palette.surface, contentColor = palette.text
         ) {
             when (panel) {
@@ -1378,9 +1385,8 @@ private fun WebspacesPanel(
             Icon(Icons.Default.Lock, null, tint = palette.accent,
                 modifier = Modifier.size(19.dp))
             Spacer(Modifier.width(10.dp))
-            Text("Webspaces organize tabs, but share Android WebView cookies. " +
-                "They do not isolate website accounts. Move tab changes this tab only; " +
-                "Route site remembers its website host.",
+            Text("Webspaces organize tabs but share WebView cookies. " +
+                "Website accounts are not isolated.",
                 color = palette.text, fontSize = 13.sp, lineHeight = 19.sp)
         }
         webspaces.entries.forEach { space ->
