@@ -77,6 +77,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -571,7 +573,8 @@ private fun BrowserApp(
             }
             Row(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 9.dp)
+                    .padding(horizontal = if (configuration.screenWidthDp < 360) 8.dp
+                        else 16.dp, vertical = 9.dp)
                     .shadow(12.dp, RoundedCornerShape(30.dp))
                     .background(palette.surface, RoundedCornerShape(30.dp))
                     .border(1.dp, palette.outline.copy(alpha = 0.35f),
@@ -729,7 +732,7 @@ private fun DockButton(
     IconButton(
         onClick = action,
         enabled = enabled,
-        modifier = Modifier.size(47.dp).then(
+        modifier = Modifier.size(48.dp).then(
             if (accent) Modifier.background(
                 palette.accent, RoundedCornerShape(17.dp)
             ) else Modifier
@@ -762,7 +765,8 @@ private fun NewTabPage(
             letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(13.dp))
         Text("Where to next?", fontSize = 32.sp, lineHeight = 38.sp,
-            fontWeight = FontWeight.Bold, color = palette.text)
+            fontWeight = FontWeight.Bold, color = palette.text,
+            modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(6.dp))
         Text("A fresh space for your next discovery.",
             color = palette.muted, fontSize = 15.sp, lineHeight = 22.sp)
@@ -876,7 +880,7 @@ private fun HomePage(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Your places", fontSize = 29.sp, lineHeight = 34.sp,
                 fontWeight = FontWeight.Bold, color = palette.text,
-                modifier = Modifier.weight(1f))
+                modifier = Modifier.weight(1f).semantics { heading() })
             Text("ON THIS DEVICE", fontSize = 10.sp, letterSpacing = 1.sp,
                 color = palette.muted)
         }
@@ -938,7 +942,7 @@ private fun PrivacyStat(
 private fun SheetHeading(title: String, subtitle: String, palette: GcPalette) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
         Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = palette.text,
-            lineHeight = 33.sp)
+            lineHeight = 33.sp, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(4.dp))
         Text(subtitle, fontSize = 14.sp, color = palette.muted, lineHeight = 20.sp)
     }
@@ -977,7 +981,8 @@ private fun PrivacySectionHeading(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, color = palette.text, fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold)
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.semantics { heading() })
             Text(description, color = palette.muted,
                 fontSize = 12.sp, lineHeight = 18.sp)
         }
@@ -1265,7 +1270,8 @@ private fun QuickDestinations(
         ).take(8)
     }
     Text("Quick destinations", fontSize = 20.sp,
-        fontWeight = FontWeight.Bold, color = palette.text)
+        fontWeight = FontWeight.Bold, color = palette.text,
+        modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(8.dp))
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -1339,7 +1345,7 @@ private fun QuickDestinations(
 
 @Composable
 private fun TabCountDock(count: Int, palette: GcPalette, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(47.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         Box(contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Tab, contentDescription = "Tabs: $count",
                 modifier = Modifier.size(28.dp), tint = palette.text)
@@ -1373,7 +1379,8 @@ private fun WebspacesPanel(
                 modifier = Modifier.size(19.dp))
             Spacer(Modifier.width(10.dp))
             Text("Webspaces organize tabs, but share Android WebView cookies. " +
-                "They do not isolate website accounts.",
+                "They do not isolate website accounts. Move tab changes this tab only; " +
+                "Route site remembers its website host.",
                 color = palette.text, fontSize = 13.sp, lineHeight = 19.sp)
         }
         webspaces.entries.forEach { space ->
