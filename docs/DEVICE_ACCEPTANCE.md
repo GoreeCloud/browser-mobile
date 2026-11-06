@@ -67,7 +67,13 @@ Startpage as the sole configured search provider. The newer accessibility
 follow-up makes full privacy-toggle rows clickable, adapts the header on small
 screens, allows horizontal scrolling of destination chips, switches to
 single-column website tiles at narrow widths/high font scales, and adds
-confirmation before disabling history or removing a custom Webspace.
+confirmation before disabling history or removing a custom Webspace. The latest
+source refinement also uses explicit GC UI primary/on-primary tokens in the
+New Tab dock action, a neutral globe instead of an unconditional address-bar
+lock icon, a collapsed optional filter-list editor, screen-reader heading
+landmarks, 48dp dock targets, narrow-screen dock insets, and two-level Webspace
+cards with separately labeled Move tab / Route site actions and validated
+custom-space creation.
 
 ### Required device test matrix
 
@@ -80,10 +86,10 @@ confirmation before disabling history or removing a custom Webspace.
 | Search/chrome | typing/IME Go, HTTPS navigation, long URL, loading, failure | Typed text visible, non-truncated function, no fake HTTPS/security indicators |
 | Quick destinations | Recent/Favorites/Most visited, empty/1/8 hosts | Horizontal chips reachable; tiles present site identity, counts and URL navigation |
 | Tabs | 1, 2, 12; active tab; close last; close inactive | Active state obvious; disabled New Tab at 12; no lost active-tab state |
-| Privacy Center | filter on/off, URL cleaner, cookies, site exceptions, DNS shortcut | Accurate state text; entire setting row activates one switch without double toggles; unsupported DNS is plainly disclosed |
+| Privacy Center | filter on/off, URL cleaner, cookies, site exceptions, DNS shortcut, expand/collapse optional filter lists | Accurate state text; entire setting row activates one switch without double toggles; optional lists are discoverable and remain configurable; unsupported DNS is plainly disclosed |
 | Clearing data | disable visited hosts, clear visited hosts, clear cookies | Confirmation and Cancel behavior; only confirmed action erases intended data |
-| Webspaces | built-in/custom, move/route, remove custom | Current tab routing is correct; removal confirmation explains tabs/rules; cookie-isolation warning remains visible |
-| Accessibility | TalkBack, switch focus, external keyboard, 48dp touch targets | Every actionable element has understandable name, role, state and predictable focus order |
+| Webspaces | built-in/custom, move tab, route site, duplicate/invalid names, ten-custom-space maximum, remove custom | Current tab routing is correct; actions remain reachable at 320dp and enlarged text; invalid/duplicate names cannot submit; removal confirmation explains tabs/rules; cookie-isolation warning remains visible |
+| Accessibility | TalkBack, headings, switch focus, external keyboard, 48dp navigation targets | Every actionable element has understandable name, role, state and predictable focus order; headings support screen-reader navigation |
 
 ### Safety and evidence requirements
 
