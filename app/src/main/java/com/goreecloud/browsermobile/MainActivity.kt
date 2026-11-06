@@ -64,6 +64,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -126,19 +127,21 @@ private data class GcPalette(
     val success: Color
 )
 
+// Native mapping of the stable GC UI v1 Iris semantic palette.
+// Keep light/dark colors paired with their explicit on-colors.
 private val DarkGc = GcPalette(
-    canvas = Color(0xFF0B1123), surface = Color(0xFF17213A),
-    surfaceAlt = Color(0xFF202B47), text = Color(0xFFF5F6FF),
-    muted = Color(0xFFAFBDD6), accent = Color(0xFFB3BAFF),
-    accentOn = Color(0xFF182143), outline = Color(0xFF34405F),
-    success = Color(0xFF8BE7CB)
+    canvas = Color(0xFF10131E), surface = Color(0xFF1D2231),
+    surfaceAlt = Color(0xFF292F40), text = Color(0xFFF2F2FA),
+    muted = Color(0xFFB3B9CF), accent = Color(0xFFC5BFFF),
+    accentOn = Color(0xFF241B66), outline = Color(0xFF747C99),
+    success = Color(0xFF9CE3B9)
 )
 private val LightGc = GcPalette(
-    canvas = Color(0xFFF4F6FE), surface = Color.White,
-    surfaceAlt = Color(0xFFE9EDFA), text = Color(0xFF19223E),
-    muted = Color(0xFF5D6880), accent = Color(0xFF4D5ED6),
-    accentOn = Color.White, outline = Color(0xFFD4DDF0),
-    success = Color(0xFF077D63)
+    canvas = Color(0xFFECF0F8), surface = Color(0xFFF9FAFD),
+    surfaceAlt = Color(0xFFE5EBF6), text = Color(0xFF20243A),
+    muted = Color(0xFF5F657B), accent = Color(0xFF5145D9),
+    accentOn = Color.White, outline = Color(0xFF8990A7),
+    success = Color(0xFF206A46)
 )
 
 class MainActivity : ComponentActivity() {
@@ -400,35 +403,54 @@ private fun BrowserApp(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 21.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier = Modifier.size(31.dp)
-                        .background(
-                            Brush.linearGradient(listOf(Color(0xFF9D8BFF), Color(0xFF62D9CE))),
-                            RoundedCornerShape(12.dp)
-                        ),
+                    modifier = Modifier.size(39.dp)
+                        .background(palette.surfaceAlt, RoundedCornerShape(14.dp))
+                        .border(1.dp, palette.outline.copy(alpha = 0.35f),
+                            RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "GoreeCloud Browser Mobile app mark",
-                        modifier = Modifier.size(31.dp)
+                        contentDescription = "GoreeCloud Browser Mobile",
+                        modifier = Modifier.size(35.dp)
                     )
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(11.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("GoreeCloud", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("BROWSER MOBILE", color = palette.muted, fontSize = 9.sp, letterSpacing = 2.sp)
+                    Text("GoreeCloud", color = palette.text, fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("BROWSER MOBILE", color = palette.muted,
+                        fontSize = 10.sp, letterSpacing = 1.4.sp)
                 }
-                // The privacy controls remain available from the overflow menu.
+                Row(
+                    modifier = Modifier.background(
+                        palette.surfaceAlt, RoundedCornerShape(99.dp)
+                    ).padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Shield, null,
+                        tint = if (preferences.blockAds) palette.success else palette.muted,
+                        modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        if (preferences.blockAds) "Blocking on" else "Blocking off",
+                        color = palette.text, fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium, maxLines = 1
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
-                    .clip(RoundedCornerShape(19.dp))
+                    .shadow(3.dp, RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(palette.surface)
-                    .border(1.dp, palette.outline, RoundedCornerShape(19.dp)),
+                    .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                        RoundedCornerShape(18.dp)),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -441,8 +463,12 @@ private fun BrowserApp(
                     value = address, onValueChange = { address = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Search privately or enter address", fontSize = 13.sp, color = palette.muted) },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = palette.text),
+                    placeholder = {
+                        Text("Search or enter address", fontSize = 14.sp,
+                            color = palette.muted, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                    },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = palette.text),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { openUrl(address) }),
                     colors = TextFieldDefaults.colors(
@@ -452,8 +478,9 @@ private fun BrowserApp(
                         cursorColor = palette.accent
                     )
                 )
-                IconButton(onClick = { openUrl(address) }, modifier = Modifier.size(46.dp)) {
-                    Icon(Icons.Default.ArrowForward, "Go", tint = palette.accent)
+                IconButton(onClick = { openUrl(address) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.ArrowForward, "Go to address or search",
+                        tint = palette.accent)
                 }
             }
             if (current.surface == Surface.WEB && current.loading) {
@@ -524,10 +551,13 @@ private fun BrowserApp(
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 7.dp)
-                    .background(palette.surface, RoundedCornerShape(26.dp))
-                    .border(1.dp, palette.outline, RoundedCornerShape(26.dp))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+                    .shadow(12.dp, RoundedCornerShape(30.dp))
+                    .background(palette.surface, RoundedCornerShape(30.dp))
+                    .border(1.dp, palette.outline.copy(alpha = 0.35f),
+                        RoundedCornerShape(30.dp))
+                    .padding(horizontal = 5.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -658,48 +688,44 @@ private fun NewTabPage(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        Spacer(Modifier.height(28.dp))
-        Box(
-            modifier = Modifier.size(78.dp).background(
-                Brush.linearGradient(listOf(Color(0xFFA78AFF), Color(0xFF72E1DA))),
-                RoundedCornerShape(26.dp)
-            ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Add, null, tint = Color(0xFF101831), modifier = Modifier.size(38.dp))
-        }
-        Spacer(Modifier.height(25.dp))
-        Text(
-            "New beginnings.",
-            fontSize = 31.sp, lineHeight = 35.sp,
-            fontWeight = FontWeight.Bold, color = palette.text
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "An open canvas for your next curiosity.",
-            color = palette.muted, fontSize = 14.sp
-        )
-        Spacer(Modifier.height(33.dp))
+        Text("NEW TAB", color = palette.accent, fontSize = 11.sp,
+            letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(13.dp))
+        Text("Where to next?", fontSize = 32.sp, lineHeight = 38.sp,
+            fontWeight = FontWeight.Bold, color = palette.text)
+        Spacer(Modifier.height(6.dp))
+        Text("A fresh space for your next discovery.",
+            color = palette.muted, fontSize = 15.sp, lineHeight = 22.sp)
+        Spacer(Modifier.height(26.dp))
         Surface(
             color = palette.surface,
-            shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(1.dp, palette.outline),
+            shape = RoundedCornerShape(26.dp),
+            border = BorderStroke(1.dp, palette.outline.copy(alpha = 0.38f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(22.dp)) {
+            Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, null, tint = palette.accent)
-                    Spacer(Modifier.width(10.dp))
-                    Text("Search the open web", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = palette.text)
+                    Box(
+                        modifier = Modifier.size(44.dp)
+                            .background(palette.surfaceAlt, RoundedCornerShape(14.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Language, null, tint = palette.accent,
+                            modifier = Modifier.size(23.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Explore the open web", fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold, color = palette.text)
+                        Text("Powered by Startpage", color = palette.muted, fontSize = 12.sp)
+                    }
                 }
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(15.dp))
                 Text(
-                    "Startpage protects your searches while GoreeCloud Search is being stabilized.",
-                    color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp
+                    "Private search while GoreeCloud Search is being stabilized.",
+                    color = palette.muted, fontSize = 14.sp, lineHeight = 21.sp
                 )
                 Spacer(Modifier.height(17.dp))
                 Button(
@@ -708,29 +734,29 @@ private fun NewTabPage(
                         containerColor = palette.accent, contentColor = palette.accentOn
                     ),
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
                 ) {
-                    Text("Open Startpage", fontWeight = FontWeight.SemiBold)
+                    Text("Open Startpage", fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(18.dp))
                 }
             }
         }
-        Spacer(Modifier.height(29.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("A LITTLE INSPIRATION", color = palette.muted,
-                fontSize = 11.sp, letterSpacing = 1.7.sp)
-        }
-        Spacer(Modifier.height(13.dp))
+        Spacer(Modifier.height(30.dp))
+        Text("A LITTLE INSPIRATION", color = palette.muted, fontSize = 11.sp,
+            letterSpacing = 1.7.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(12.dp))
         SuggestionRow("Discover something new", "the history of the internet", palette, openUrl)
         SuggestionRow("Explore the universe", "latest space discoveries", palette, openUrl)
-        SuggestionRow("Learn one new thing", "science breakthroughs", palette, openUrl)
-        Spacer(Modifier.height(24.dp))
-        TextButton(onClick = onHome) {
+        SuggestionRow("Learn something today", "science breakthroughs", palette, openUrl)
+        Spacer(Modifier.height(18.dp))
+        TextButton(onClick = onHome, modifier = Modifier.align(Alignment.CenterHorizontally)) {
             Icon(Icons.Default.Home, null, tint = palette.accent, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Visit your Home", color = palette.accent)
         }
+        Spacer(Modifier.height(18.dp))
     }
 }
 
@@ -769,18 +795,33 @@ private fun HomePage(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 19.dp, vertical = 12.dp)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
         val today = remember {
             LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d"))
         }
-        Text(today.uppercase(), color = palette.muted, letterSpacing = 1.8.sp, fontSize = 10.sp)
-        Spacer(Modifier.height(8.dp))
+        Text(today.uppercase(), color = palette.muted,
+            letterSpacing = 1.5.sp, fontSize = 11.sp)
+        Spacer(Modifier.height(17.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Your places", fontSize = 29.sp, lineHeight = 34.sp,
+                fontWeight = FontWeight.Bold, color = palette.text,
+                modifier = Modifier.weight(1f))
+            Text("ON THIS DEVICE", fontSize = 10.sp, letterSpacing = 1.sp,
+                color = palette.muted)
+        }
+        Spacer(Modifier.height(15.dp))
+        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
+        Spacer(Modifier.height(23.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Privacy at a glance", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = palette.text, modifier = Modifier.weight(1f))
-            TextButton(onClick = onPrivacy) { Text("Manage", color = palette.accent) }
+            TextButton(onClick = onPrivacy) {
+                Text("Manage", color = palette.accent,
+                    fontWeight = FontWeight.SemiBold)
+            }
         }
+        Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrivacyStat(
                 modifier = Modifier.weight(1f),
@@ -792,14 +833,12 @@ private fun HomePage(
             PrivacyStat(
                 modifier = Modifier.weight(1f),
                 count = cleaned.toString(),
-                name = "Trackers removed",
+                name = "Tracking fields removed",
                 icon = Icons.Default.Lock,
                 palette = palette
             )
         }
-        Spacer(Modifier.height(27.dp))
-        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
-        Spacer(Modifier.height(25.dp))
+        Spacer(Modifier.height(30.dp))
     }
 }
 
@@ -813,13 +852,15 @@ private fun PrivacyStat(
 ) {
     Column(
         modifier = modifier.background(palette.surface, RoundedCornerShape(22.dp))
-            .border(1.dp, palette.outline, RoundedCornerShape(22.dp))
+            .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                RoundedCornerShape(22.dp))
             .padding(17.dp)
     ) {
         Icon(icon, null, tint = palette.success, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(13.dp))
         Text(count, color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-        Text(name, color = palette.muted, fontSize = 11.sp)
+        Text(name, color = palette.muted, fontSize = 12.sp,
+            lineHeight = 16.sp)
     }
 }
 
