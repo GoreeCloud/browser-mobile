@@ -40,6 +40,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -72,6 +74,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -324,6 +329,9 @@ private fun BrowserApp(
     var panel by remember { mutableStateOf<Panel?>(null) }
     var cleanedCount by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
+    val configuration = LocalConfiguration.current
+    val compactHeader = configuration.screenWidthDp < 390 ||
+        configuration.fontScale >= 1.25f
 
     fun openUrl(input: String) {
         val resolved = NavigationPolicy.resolve(input, preferences.cleanUrls)
@@ -430,15 +438,26 @@ private fun BrowserApp(
                 Row(
                     modifier = Modifier.background(
                         palette.surfaceAlt, RoundedCornerShape(99.dp)
-                    ).padding(horizontal = 10.dp, vertical = 7.dp),
+                    ).padding(horizontal = if (compactHeader) 8.dp else 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Shield, null,
+                    Icon(
+                        Icons.Default.Shield,
+                        contentDescription = if (compactHeader) {
+                            if (preferences.blockAds) "Ad and tracker blocking on"
+                            else "Ad and tracker blocking off"
+                        } else null,
                         tint = if (preferences.blockAds) palette.success else palette.muted,
-                        modifier = Modifier.size(15.dp))
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        if (preferences.blockAds) "Blocking on" else "Blocking off",
+                        when {
+                            !compactHeader && preferences.blockAds -> "Blocking on"
+                            !compactHeader -> "Blocking off"
+                            preferences.blockAds -> "On"
+                            else -> "Off"
+                        },
                         color = palette.text, fontSize = 11.sp,
                         fontWeight = FontWeight.Medium, maxLines = 1
                     )
@@ -915,7 +934,7 @@ private fun SheetAction(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = action)
-            .padding(horizontal = 24.dp, vertical = 15.dp),
+            .heightIn(min = 52.dp).padding(horizontal = 24.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, modifier = Modifier.size(21.dp), tint = palette.accent)
@@ -959,8 +978,10 @@ private fun PrivacyToggle(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 13.dp)
-            .heightIn(min = 50.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .heightIn(min = 56.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onChange)
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
@@ -971,7 +992,7 @@ private fun PrivacyToggle(
         }
         Spacer(Modifier.width(16.dp))
         Switch(
-            checked = enabled, onCheckedChange = onChange,
+            checked = enabled, onCheckedChange = null,
             colors = SwitchDefaults.colors(
                 checkedTrackColor = palette.accent,
                 checkedThumbColor = palette.accentOn
@@ -993,6 +1014,7 @@ private fun PrivacyPanel(
 ) {
     val message = remember { mutableStateOf("") }
     var confirmHistoryClear by remember { mutableStateOf(false) }
+    var confirmHistoryDisable by remember { mutableStateOf(false) }
     var confirmCookiesClear by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
@@ -1045,12 +1067,8 @@ private fun PrivacyPanel(
             "Remember visited websites",
             "Keeps up to 100 website hosts locally for Recent and Most Visited; no URLs or search terms.",
             library.historyEnabled, palette, { enabled ->
-                library.updateHistoryEnabled(enabled)
-                if (!enabled) {
-                    library.clear()
-                    icons.clear()
-                    message.value = "Local website history and favicons cleared"
-                }
+                if (enabled) library.updateHistoryEnabled(true)
+                else confirmHistoryDisable = true
             }
         )
         SheetAction(Icons.Default.Delete, "Clear recent websites and favicons", palette) {
@@ -1127,6 +1145,28 @@ private fun PrivacyPanel(
         }
         Spacer(Modifier.height(32.dp))
     }
+    if (confirmHistoryDisable) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryDisable = false },
+            title = { Text("Turn off visited websites?") },
+            text = {
+                Text("Turning off this feature also clears recent and most-visited " +
+                    "website hosts and saved favicons from this device. Bookmarks remain.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.updateHistoryEnabled(false)
+                    library.clear()
+                    icons.clear()
+                    message.value = "Visited websites disabled; local history and favicons cleared"
+                    confirmHistoryDisable = false
+                }) { Text("Turn off & clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryDisable = false }) { Text("Cancel") }
+            }
+        )
+    }
     if (confirmHistoryClear) {
         AlertDialog(
             onDismissRequest = { confirmHistoryClear = false },
@@ -1193,7 +1233,10 @@ private fun QuickDestinations(
     Text("Quick destinations", fontSize = 20.sp,
         fontWeight = FontWeight.Bold, color = palette.text)
     Spacer(Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
         listOf(DestinationMode.RECENT to "Recent",
             DestinationMode.FAVORITES to "Favorites",
             DestinationMode.MOST to "Most visited").forEach { (option, label) ->
@@ -1219,7 +1262,10 @@ private fun QuickDestinations(
             modifier = Modifier.fillMaxWidth().padding(vertical = 17.dp)
         )
     }
-    sites.chunked(2).forEach { pair ->
+    // At high text scales or narrow windows, avoid squeezing two site names into one row.
+    val oneColumn = LocalConfiguration.current.screenWidthDp < 350 ||
+        LocalDensity.current.fontScale >= 1.45f
+    sites.chunked(if (oneColumn) 1 else 2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
             pair.forEach { site ->
@@ -1277,6 +1323,7 @@ private fun WebspacesPanel(
     open: (String) -> Unit, onRemove: (String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var pendingRemove by remember { mutableStateOf<com.goreecloud.browsermobile.core.WebspaceEntry?>(null) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Webspaces", "Organize tabs and route sites", palette)
         Row(
@@ -1325,8 +1372,9 @@ private fun WebspacesPanel(
                     }) { Text("Route", fontSize = 11.sp) }
                 }
                 if (space.id.startsWith("custom-")) {
-                    IconButton(onClick = { onRemove(space.id) }) {
-                        Icon(Icons.Default.Delete, "Remove Webspace", tint = palette.muted)
+                    IconButton(onClick = { pendingRemove = space }) {
+                        Icon(Icons.Default.Delete,
+                            "Remove " + space.name + " Webspace", tint = palette.muted)
                     }
                 }
             }
@@ -1351,6 +1399,25 @@ private fun WebspacesPanel(
             ) { Text("Remove this site's routing rule") }
         }
         Spacer(Modifier.height(24.dp))
+    }
+    pendingRemove?.let { space ->
+        AlertDialog(
+            onDismissRequest = { pendingRemove = null },
+            title = { Text("Remove " + space.name + "?") },
+            text = {
+                Text("This removes the Webspace and its site routing rules. Open tabs " +
+                    "in it move back to Standard. Website cookies are not deleted.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(space.id)
+                    pendingRemove = null
+                }) { Text("Remove Webspace") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemove = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
