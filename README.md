@@ -14,6 +14,7 @@ GoreeCloud Browser Mobile is an original, privacy-oriented Android browser built
 - **Cookie controls** for global cookie acceptance, third-party cookies (off by default), and explicit clearing of cookie and web-storage data.
 - **System DNS manager entry point** to Android Private DNS settings. Android WebView uses the OS DNS stack; per-app custom DNS/DoH is **not** implemented.
 - **Modern GC UI-inspired Iris treatment** with system light/dark modes, branded launcher artwork, clear bottom navigation, and touch-friendly settings.
+- **HTTPS-first browsing:** bare and explicit `http://` addresses are upgraded to HTTPS; top-level HTTP GET links are upgraded where WebView exposes navigation callbacks, without a cleartext or TLS-failure downgrade fallback. Rewritten non-GET requests are canceled rather than replayed with changed methods. Legacy HTTP-only websites may not work.
 - Defensive WebView defaults: no file/content access, mixed-content prohibition, Safe Browsing enabled, no auto popups, explicit denial of browser device-permission prompts, and SSL-error cancellation.
 - **Device-local data protection**: Android cloud backup is disabled, and explicit Android 12+ data-extraction rules exclude browser data from both cloud backup and device-to-device transfer. Android themed-launcher icons are supported.
 

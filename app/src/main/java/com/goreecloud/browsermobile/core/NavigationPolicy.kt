@@ -54,7 +54,31 @@ object UrlCleaner {
     }
 }
 
+data class WebNavigationAction(
+    val intercept: Boolean,
+    val destination: String? = null,
+    val removedParameters: Int = 0
+)
+
 object NavigationPolicy {
+    /**
+     * Safe top-level WebView navigation decision. A rewritten non-GET request
+     * must be blocked rather than silently reissued as an unauthenticated GET.
+     */
+    fun navigationAction(url: String, method: String, cleanLinks: Boolean): WebNavigationAction {
+        if (!isHttpUrl(url)) return WebNavigationAction(intercept = true)
+        val secured = secureHttpUrl(url)
+        val cleaned = if (cleanLinks) UrlCleaner.clean(secured) else null
+        val destination = cleaned?.url ?: secured
+        if (destination == url) return WebNavigationAction(intercept = false)
+        if (!method.equals("GET", ignoreCase = true)) return WebNavigationAction(intercept = true)
+        return WebNavigationAction(
+            intercept = true,
+            destination = destination,
+            removedParameters = cleaned?.removedParameters ?: 0
+        )
+    }
+
     private val hostPattern = Regex(
         """^(localhost|(?:[\p{L}\p{N}-]+\.)+[\p{L}\p{N}-]{2,})(?::\d{1,5})?(?:[/?#].*)?$""",
         RegexOption.IGNORE_CASE
@@ -72,10 +96,22 @@ object NavigationPolicy {
             else -> return SearchPolicy.search(input)
         }
         return if (isHttpUrl(target)) {
-            if (cleanLinks) UrlCleaner.clean(target).url else target
+            val secured = secureHttpUrl(target)
+            if (cleanLinks) UrlCleaner.clean(secured).url else secured
         } else {
             SearchPolicy.search(input)
         }
+    }
+
+    /**
+     * Never load cleartext pages in this browser. Upgrade explicit HTTP to HTTPS,
+     * without a silent HTTP fallback if TLS fails. Only call for validated web URLs.
+     */
+    fun secureHttpUrl(value: String): String {
+        if (!isHttpUrl(value)) return value
+        return if (value.startsWith("http://", ignoreCase = true)) {
+            "https://" + value.substring(7)
+        } else value
     }
 
     fun isHttpUrl(value: String): Boolean {

@@ -12,6 +12,8 @@ class BrowserPreferences(context: Context) {
 
     var blockAds by mutableStateOf(storage.getBoolean("block_ads", true))
         private set
+    @Volatile var blockAdsForRequests = blockAds
+        private set
     var cleanUrls by mutableStateOf(storage.getBoolean("clean_urls", true))
         private set
     var acceptCookies by mutableStateOf(storage.getBoolean("accept_cookies", true))
@@ -30,6 +32,7 @@ class BrowserPreferences(context: Context) {
 
     fun updateBlockAds(enabled: Boolean) {
         blockAds = enabled
+        blockAdsForRequests = enabled
         storage.edit().putBoolean("block_ads", enabled).apply()
     }
 

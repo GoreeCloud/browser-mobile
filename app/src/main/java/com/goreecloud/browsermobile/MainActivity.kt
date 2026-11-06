@@ -93,6 +93,7 @@ private class BrowserTab {
     val id: String = UUID.randomUUID().toString()
     var surface by mutableStateOf(Surface.NEW_TAB)
     var url by mutableStateOf("")
+    @Volatile var requestTopLevelUrl: String = ""
     var title by mutableStateOf("New Tab")
     var loading by mutableStateOf(false)
     var progress by mutableIntStateOf(0)
@@ -192,25 +193,20 @@ private fun configureWebView(
     webView.webViewClient = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return false
-            val requested = request.url.toString()
-            if (!NavigationPolicy.isHttpUrl(requested)) return true
-            if (preferences.cleanUrls) {
-                val cleaned = UrlCleaner.clean(requested)
-                if (cleaned.removedParameters > 0) {
-                    onUrlCleaned(cleaned.removedParameters)
-                    view.loadUrl(cleaned.url)
-                    return true
-                }
-            }
-            return false
+            val action = NavigationPolicy.navigationAction(
+                request.url.toString(), request.method, preferences.cleanUrls
+            )
+            if (action.removedParameters > 0) onUrlCleaned(action.removedParameters)
+            action.destination?.let(view::loadUrl)
+            return action.intercept
         }
 
         override fun shouldInterceptRequest(
             view: WebView,
             request: WebResourceRequest
         ): WebResourceResponse? {
-            if (preferences.blockAds && !request.isForMainFrame &&
-                !preferences.isSiteExempt(tab.url) &&
+            if (preferences.blockAdsForRequests && !request.isForMainFrame &&
+                !preferences.isSiteExempt(tab.requestTopLevelUrl) &&
                 filterLists.shouldBlock(request.url.toString())) {
                 mainHandler.post { tab.blocked++ }
                 return WebResourceResponse(
@@ -223,12 +219,18 @@ private fun configureWebView(
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             tab.loading = true
             tab.error = null
-            if (url != null && NavigationPolicy.isHttpUrl(url)) tab.url = url
+            if (url != null && NavigationPolicy.isHttpUrl(url)) {
+                tab.url = url
+                tab.requestTopLevelUrl = url
+            }
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
             tab.loading = false
-            if (!url.isNullOrBlank() && NavigationPolicy.isHttpUrl(url)) tab.url = url
+            if (!url.isNullOrBlank() && NavigationPolicy.isHttpUrl(url)) {
+                tab.url = url
+                tab.requestTopLevelUrl = url
+            }
             tab.title = view.title?.takeIf { it.isNotBlank() } ?: "Website"
         }
 
@@ -290,6 +292,7 @@ private fun BrowserApp(
         if (resolved.isBlank()) return
         current.error = null
         current.url = resolved
+        current.requestTopLevelUrl = resolved
         current.surface = Surface.WEB
         current.webView?.loadUrl(resolved)
         focus.clearFocus()
@@ -311,6 +314,7 @@ private fun BrowserApp(
             tab.webView?.destroy()
             tab.webView = null
             tab.url = ""
+            tab.requestTopLevelUrl = ""
             tab.title = "New Tab"
             tab.surface = Surface.NEW_TAB
         } else {
