@@ -24,8 +24,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
-      - name: Test & assemble debug variant
-        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
+      - name: Test JVM and compile Android UI tests (no device execution)
+        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --no-daemon --stacktrace
       - name: Retain debug APK for verified testing
         uses: actions/upload-artifact@v4
         with:
