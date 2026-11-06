@@ -91,6 +91,26 @@ custom-space creation.
 | Webspaces | built-in/custom, move tab, route site, duplicate/invalid names, ten-custom-space maximum, remove custom | Current tab routing is correct; actions remain reachable at 320dp and enlarged text; invalid/duplicate names cannot submit; removal confirmation explains tabs/rules; cookie-isolation warning remains visible |
 | Accessibility | TalkBack, headings, switch focus, external keyboard, 48dp navigation targets | Every actionable element has understandable name, role, state and predictable focus order; headings support screen-reader navigation |
 
+### Repeatable Compose UI smoke tests (source and build only)
+
+The review branch adds
+`app/src/androidTest/java/com/goreecloud/browsermobile/BrowserChromeInstrumentedTest.kt`
+with three focused instrumentation scenarios:
+
+- Home / New Tab separation and navigation via the bottom dock.
+- Privacy Center optional-filter list disclosure, expansion, and collapse.
+- Webspaces shared-cookie disclosure and nonactionable invalid custom-space creation.
+
+The pull-request CI includes `:app:assembleDebugAndroidTest` to **compile** the
+Android UI test APK in addition to JVM tests, debug app assembly, and Lint.
+**Compilation is not instrumentation execution.** No UI test is claimed
+to have passed on a physical device or emulator until an authorized run
+produces test results for the exact build being reviewed.
+
+The app's normal FilterListEngine can refresh enabled HTTPS filter
+subscriptions on launch; disclose this network behavior as part of test
+consent and avoid incidental access to personal browsing data.
+
 ### Safety and evidence requirements
 
 - Confirm target device ownership and obtain any required approval **before** app installation,
