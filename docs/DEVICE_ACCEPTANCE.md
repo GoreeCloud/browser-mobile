@@ -55,3 +55,9 @@ No image-generation tool was used for that redesign. At the time of this earlier
 ## November 6 founder New Tab mockup acceptance
 
 See [source-grounded New Tab mockup audit](NEW_TAB_MOCKUP_AUDIT.md) and [UI acceptance notes](UI_ACCEPTANCE.md). The same OnePlus N200 was used for an in-place debug APK update to test the native wave, Startpage card, four Quick Access controls, dark and light mode, landscape, 130%/100% text size, and preserved neutral floating navigation. The OS Downloads activity launched from the Downloads shortcut, and the Startpage web destination loaded. The local v2-signed debug APK passed 26 JVM tests, Lint and assembly. Device settings were restored after testing. No screenshots were committed and no image-generation service was used.
+
+## November 6 — premium New Tab and identity rework after founder rejection
+
+Source improvements now include a simplified open-ring/forward-arrow vector (header, adaptive launcher and monochrome), canonical central brand-assets revision [e02c3d5](https://github.com/GoreeCloud/brand-assets/commit/e02c3d5), a raised search field, grouped editorial New Tab hero, subtle native orbit ambience, an elevated navy Startpage feature card and tonal Quick Access tiles. Up to two real visited hosts appear beneath the shortcuts when app-private website-host history is enabled. The founder-requested neutral New Tab action and removal of the top privacy badge were preserved.
+
+A debug build was installed on the authorized OnePlus N200 and visually inspected in light/dark and at 100%/130% text. In the initial screen review, the dot/eyebrow floated too far from the heading; grouping those elements into one hero was the final polish correction. No AI image generation occurred. This is source-and-device preview validation, **not founder visual approval or comprehensive accessibility acceptance**.

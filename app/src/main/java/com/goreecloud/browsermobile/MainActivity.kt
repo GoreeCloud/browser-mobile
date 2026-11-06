@@ -73,6 +73,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -410,44 +414,48 @@ private fun BrowserApp(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 21.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 18.dp, top = 9.dp, bottom = 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
                     painter = painterResource(R.drawable.ic_browser_symbol),
                     contentDescription = "GoreeCloud Browser Mobile",
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(46.dp)
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("GoreeCloud", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("BROWSER MOBILE", color = palette.muted, fontSize = 9.sp, letterSpacing = 2.sp)
+                    Text("GoreeCloud", color = palette.text, fontSize = 19.sp,
+                        letterSpacing = (-0.35).sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
+                    Text("BROWSER MOBILE", color = palette.muted,
+                        fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.8.sp)
                 }
                 // The privacy controls remain available from the overflow menu.
             }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
-                    .clip(RoundedCornerShape(19.dp))
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp)
+                    .shadow(5.dp, RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(22.dp))
                     .background(palette.surface)
-                    .border(1.dp, palette.outline, RoundedCornerShape(19.dp)),
+                    .border(0.8.dp, palette.outline.copy(alpha = 0.70f), RoundedCornerShape(22.dp)),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     if (current.surface == Surface.WEB) Icons.Default.Lock else Icons.Default.Search,
                     contentDescription = null,
                     tint = palette.accent,
-                    modifier = Modifier.padding(start = 15.dp).size(18.dp)
+                    modifier = Modifier.padding(start = 17.dp).size(20.dp)
                 )
                 TextField(
                     value = address, onValueChange = { address = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     placeholder = {
-                        Text("Search or enter address", fontSize = 13.sp,
+                        Text("Search or enter address", fontSize = 14.sp,
                             color = palette.muted, maxLines = 1,
                             softWrap = false, overflow = TextOverflow.Ellipsis)
                     },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = palette.text),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = palette.text),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { openUrl(address) }),
                     colors = TextFieldDefaults.colors(
@@ -457,8 +465,13 @@ private fun BrowserApp(
                         cursorColor = palette.accent
                     )
                 )
-                IconButton(onClick = { openUrl(address) }, modifier = Modifier.size(46.dp)) {
-                    Icon(Icons.Default.ArrowForward, "Go", tint = palette.accent)
+                IconButton(
+                    onClick = { openUrl(address) },
+                    modifier = Modifier.padding(end = 6.dp).size(42.dp)
+                        .background(palette.surfaceAlt, RoundedCornerShape(15.dp))
+                ) {
+                    Icon(Icons.Default.ArrowForward, "Go", tint = palette.accent,
+                        modifier = Modifier.size(21.dp))
                 }
             }
             if (current.surface == Surface.WEB && current.loading) {
@@ -474,6 +487,7 @@ private fun BrowserApp(
                 when (current.surface) {
                     Surface.NEW_TAB -> NewTabPage(
                         palette = palette, openUrl = ::openUrl,
+                        library = library, icons = icons, faviconRevision = faviconRevision,
                         onBookmarks = { panel = Panel.BOOKMARKS },
                         onHistory = { panel = Panel.HISTORY },
                         onDownloads = { panel = Panel.DOWNLOADS },
@@ -535,9 +549,9 @@ private fun BrowserApp(
         Row(
             modifier = Modifier.align(Alignment.BottomCenter)
                 .padding(horizontal = 16.dp, vertical = 12.dp)
-                .shadow(14.dp, RoundedCornerShape(30.dp), clip = false)
+                .shadow(11.dp, RoundedCornerShape(30.dp), clip = false)
                 .background(palette.surface.copy(alpha = 0.98f), RoundedCornerShape(30.dp))
-                .border(1.dp, palette.outline.copy(alpha = 0.9f), RoundedCornerShape(30.dp))
+                .border(0.8.dp, palette.outline.copy(alpha = 0.75f), RoundedCornerShape(30.dp))
                 .padding(horizontal = 7.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
@@ -658,81 +672,96 @@ private fun DockButton(
 @Composable
 private fun NewTabPage(
     palette: GcPalette,
+    library: BrowsingLibrary,
+    icons: SiteIcons,
+    faviconRevision: Int,
     openUrl: (String) -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
     onDownloads: () -> Unit,
     onSettings: () -> Unit
 ) {
+    val recent = if (library.historyEnabled)
+        library.sites.sortedByDescending { it.lastVisitedMs }.take(2)
+    else emptyList()
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 8.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
-        Box(Modifier.fillMaxWidth().height(172.dp)) {
-            NewTabWaveAccent(palette)
+        Box(Modifier.fillMaxWidth().height(154.dp)) {
+            NewTabAmbient(palette)
             Column(
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 2.dp)
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).background(palette.success, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text("A FRESH START", color = palette.muted, fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold, letterSpacing = 1.8.sp)
+                }
+                Spacer(Modifier.height(15.dp))
                 Text("Where to next?", color = palette.text,
-                    fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("A fresh space for your next discovery.",
+                    fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.75).sp)
+                Spacer(Modifier.height(9.dp))
+                Text("Your next discovery starts here.",
                     fontSize = 13.sp, lineHeight = 19.sp, color = palette.muted)
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(14.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = palette.surface,
-            shape = RoundedCornerShape(23.dp),
-            border = BorderStroke(1.dp, palette.outline),
-            shadowElevation = 3.dp
+            shape = RoundedCornerShape(26.dp),
+            color = DarkGc.surface,
+            shadowElevation = 7.dp
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp)
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .background(Brush.linearGradient(listOf(
+                        Color(0xFF263965), Color(0xFF182641), Color(0xFF14243B))))
+                    .heightIn(min = 93.dp)
+                    .padding(horizontal = 17.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    Modifier.size(43.dp)
-                        .background(palette.surfaceAlt, RoundedCornerShape(14.dp)),
+                    Modifier.size(47.dp)
+                        .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.Language, contentDescription = null,
-                        tint = palette.accent, modifier = Modifier.size(25.dp))
+                        tint = Color(0xFF87E9DE), modifier = Modifier.size(27.dp))
                 }
-                Spacer(Modifier.width(11.dp))
-                Box(Modifier.width(1.dp).height(35.dp).background(palette.outline))
-                Spacer(Modifier.width(11.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Explore the web", color = palette.text,
-                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(2.dp))
-                    Text("Powered by Startpage", fontSize = 11.sp,
-                        color = palette.muted, maxLines = 1,
+                    Text("Explore the web", color = Color.White,
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Search with Startpage", fontSize = 11.sp,
+                        color = Color(0xFFD0DBF1), maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { openUrl(SearchPolicy.HOME_URL) },
                     shape = RoundedCornerShape(15.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(43.dp),
+                    contentPadding = PaddingValues(horizontal = 13.dp),
+                    modifier = Modifier.height(44.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent, contentColor = palette.accentOn)
+                        containerColor = Color.White, contentColor = Color(0xFF1B2947))
                 ) {
-                    Text("Open", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(4.dp))
+                    Text("Open", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
                     Icon(Icons.Default.ArrowForward, contentDescription = null,
-                        modifier = Modifier.size(16.dp))
+                        modifier = Modifier.size(17.dp))
                 }
             }
         }
-        Spacer(Modifier.height(28.dp))
-        Text("QUICK ACCESS", color = palette.muted, fontSize = 11.sp,
-            letterSpacing = 1.7.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(13.dp))
+        Spacer(Modifier.height(30.dp))
+        Text("YOUR SHORTCUTS", color = palette.muted, fontSize = 11.sp,
+            letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val columns = if (maxWidth < 340.dp || LocalDensity.current.fontScale >= 1.2f) 2 else 4
             val tiles = listOf(
@@ -741,56 +770,91 @@ private fun NewTabPage(
                 Triple("Downloads", Icons.Default.Download, onDownloads),
                 Triple("Settings", Icons.Default.Settings, onSettings)
             )
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 tiles.chunked(columns).forEach { segment ->
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(9.dp)
-                    ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         segment.forEach { (label, icon, action) ->
+                            val tint = when (label) {
+                                "History" -> palette.success
+                                "Settings" -> palette.muted
+                                else -> palette.accent
+                            }
                             QuickAccessTile(label, icon, palette,
-                                Modifier.weight(1f), action)
+                                tint = tint, modifier = Modifier.weight(1f), action = action)
                         }
                         repeat(columns - segment.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
         }
-        Spacer(Modifier.height(30.dp))
+        if (recent.isNotEmpty()) {
+            Spacer(Modifier.height(30.dp))
+            Text("PICK UP WHERE YOU LEFT OFF", color = palette.muted,
+                fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val vertical = maxWidth < 340.dp || LocalDensity.current.fontScale >= 1.2f
+                if (vertical) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        recent.forEach { site ->
+                            RecentNewTabSite(site, icons, faviconRevision, palette,
+                                Modifier.fillMaxWidth()) { openUrl(site.url) }
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        recent.forEach { site ->
+                            RecentNewTabSite(site, icons, faviconRevision, palette,
+                                Modifier.weight(1f)) { openUrl(site.url) }
+                        }
+                        if (recent.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(34.dp))
     }
 }
 
 @Composable
-private fun NewTabWaveAccent(palette: GcPalette) {
+private fun NewTabAmbient(palette: GcPalette) {
     val dark = palette.canvas == DarkGc.canvas
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
-        val back = Path().apply {
-            moveTo(w * 0.65f, h * 0.70f)
-            cubicTo(w * 0.72f, h * 0.63f, w * 0.72f, h * 0.17f, w, h * 0.18f)
-            lineTo(w, h * 0.82f)
-            cubicTo(w * 0.83f, h * 0.48f, w * 0.73f, h * 1.04f, w * 0.65f, h * 0.70f)
-            close()
-        }
-        drawPath(
-            path = back,
-            brush = Brush.horizontalGradient(
-                listOf(Color.Transparent,
-                    Color(0xFF45A8FF).copy(alpha = if (dark) 0.13f else 0.15f))),
+        val center = Offset(w * 0.92f, h * 0.48f)
+        val radius = h * 0.76f
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(
+                    palette.accent.copy(alpha = if (dark) 0.14f else 0.12f),
+                    palette.success.copy(alpha = if (dark) 0.08f else 0.06f),
+                    Color.Transparent
+                ),
+                center = center, radius = radius
+            ),
+            radius = radius, center = center
         )
-        val front = Path().apply {
-            moveTo(w * 0.73f, h * 0.78f)
-            cubicTo(w * 0.76f, h * 0.45f, w * 0.89f, h * 0.43f, w, h * 0.48f)
-            lineTo(w, h * 0.89f)
-            cubicTo(w * 0.85f, h * 0.68f, w * 0.77f, h * 1.01f, w * 0.73f, h * 0.78f)
-            close()
+        val orbitRadius = h * 0.42f
+        drawCircle(
+            color = palette.accent.copy(alpha = if (dark) 0.18f else 0.13f),
+            radius = orbitRadius, center = center,
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        drawCircle(
+            color = palette.success.copy(alpha = if (dark) 0.23f else 0.18f),
+            radius = orbitRadius * 0.66f,
+            center = Offset(center.x + orbitRadius * 0.12f, center.y),
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        val arc = Path().apply {
+            moveTo(w * 0.71f, h * 0.84f)
+            cubicTo(w * 0.82f, h * 0.90f, w * 0.89f, h * 0.74f, w, h * 0.77f)
         }
         drawPath(
-            path = front,
-            brush = Brush.horizontalGradient(
-                listOf(Color.Transparent,
-                    Color(0xFF30C9E4).copy(alpha = if (dark) 0.14f else 0.17f)))
+            path = arc,
+            color = palette.success.copy(alpha = if (dark) 0.28f else 0.17f),
+            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
         )
     }
 }
@@ -800,28 +864,80 @@ private fun QuickAccessTile(
     title: String,
     icon: ImageVector,
     palette: GcPalette,
+    tint: Color,
     modifier: Modifier = Modifier,
     action: () -> Unit
 ) {
     Surface(
         onClick = action,
-        modifier = modifier.heightIn(min = 92.dp),
+        modifier = modifier.heightIn(min = 104.dp),
         color = palette.surface,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, palette.outline),
-        shadowElevation = 1.dp
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(0.8.dp, palette.outline.copy(alpha = 0.66f)),
+        shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 15.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 13.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null,
-                tint = palette.text, modifier = Modifier.size(27.dp))
-            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier.size(39.dp)
+                    .background(tint.copy(alpha = 0.10f), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = tint,
+                    modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.height(11.dp))
             Text(title, color = palette.text, fontSize = 11.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Medium)
+                fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun RecentNewTabSite(
+    site: VisitedSite,
+    icons: SiteIcons,
+    faviconRevision: Int,
+    palette: GcPalette,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val favicon = remember(site.host, faviconRevision) { icons.load(site.host) }
+    Surface(
+        onClick = onClick, modifier = modifier,
+        color = palette.surfaceAlt.copy(alpha = 0.65f),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(0.7.dp, palette.outline.copy(alpha = 0.65f))
+    ) {
+        Row(
+            modifier = Modifier.heightIn(min = 58.dp)
+                .padding(horizontal = 11.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(31.dp)
+                    .background(palette.surface, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (favicon != null) {
+                    Image(bitmap = favicon.asImageBitmap(), contentDescription = null,
+                        modifier = Modifier.size(23.dp))
+                } else {
+                    Icon(Icons.Default.Language, contentDescription = null,
+                        tint = palette.accent, modifier = Modifier.size(19.dp))
+                }
+            }
+            Spacer(Modifier.width(9.dp))
+            Text(site.host, color = palette.text,
+                fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            Icon(Icons.Default.ArrowForward, contentDescription = null,
+                tint = palette.muted, modifier = Modifier.size(16.dp))
         }
     }
 }
