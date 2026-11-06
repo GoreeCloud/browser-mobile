@@ -593,7 +593,7 @@ private fun BrowserApp(
         ) {
             when (panel) {
                 Panel.TABS -> {
-                    SheetHeading("Your tabs", "${tabs.size} open · maximum 12", palette)
+                    SheetHeading("Your tabs", "${tabs.size} of 12 tabs · choose one to continue", palette)
                     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 7.dp)) {
                         items(tabs.toList(), key = { it.id }) { tab ->
                             Row(
@@ -601,19 +601,43 @@ private fun BrowserApp(
                                     .padding(bottom = 9.dp)
                                     .background(
                                         if (tab.id == activeId) palette.surfaceAlt else palette.canvas,
-                                        RoundedCornerShape(17.dp)
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .border(1.dp,
+                                        if (tab.id == activeId) palette.accent.copy(alpha = 0.58f)
+                                        else palette.outline.copy(alpha = 0.3f),
+                                        RoundedCornerShape(20.dp)
                                     )
                                     .clickable { activeId = tab.id; panel = null }
-                                    .padding(14.dp),
+                                    .padding(horizontal = 16.dp, vertical = 15.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Language, null, tint = palette.accent)
+                                Box(
+                                    modifier = Modifier.size(38.dp)
+                                        .background(palette.surface, RoundedCornerShape(12.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        if (tab.surface == Surface.WEB) Icons.Default.Language
+                                        else Icons.Default.Home,
+                                        null, tint = palette.accent, modifier = Modifier.size(21.dp)
+                                    )
+                                }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(tab.title, color = palette.text, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(tab.title, color = palette.text, maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.weight(1f, fill = false))
+                                        if (tab.id == activeId) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("ACTIVE", color = palette.accent,
+                                                fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                     Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
-                                        ?: "Standard", color = palette.accent, fontSize = 10.sp)
+                                        ?: "Standard", color = palette.accent, fontSize = 12.sp)
                                     Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
                                         color = palette.muted, fontSize = 12.sp, maxLines = 1,
                                         overflow = TextOverflow.Ellipsis)
@@ -624,8 +648,18 @@ private fun BrowserApp(
                             }
                         }
                     }
-                    TextButton(onClick = { openNewTab() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
+                    Button(
+                        onClick = { openNewTab() }, enabled = tabs.size < 12,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)
+                            .heightIn(min = 50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = palette.accent, contentColor = palette.accentOn
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("New tab")
                     }
                 }
                 Panel.PRIVACY -> PrivacyPanel(
@@ -769,14 +803,16 @@ private fun SuggestionRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
-            .background(palette.surfaceAlt.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
+            .background(palette.surfaceAlt, RoundedCornerShape(18.dp))
             .clickable { openUrl(query) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Default.Search, null, tint = palette.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
-        Text(title, color = palette.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(title, color = palette.text, fontSize = 14.sp,
+            modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
         Icon(Icons.Default.ArrowForward, null, tint = palette.muted, modifier = Modifier.size(18.dp))
     }
 }
@@ -1097,8 +1133,16 @@ private fun QuickDestinations(
         listOf(DestinationMode.RECENT to "Recent",
             DestinationMode.FAVORITES to "Favorites",
             DestinationMode.MOST to "Most visited").forEach { (option, label) ->
-            FilterChip(selected = mode == option, onClick = { mode = option },
-                label = { Text(label, fontSize = 11.sp) })
+            FilterChip(
+                selected = mode == option, onClick = { mode = option },
+                label = { Text(label, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = palette.surfaceAlt,
+                    selectedLabelColor = palette.text,
+                    containerColor = palette.canvas,
+                    labelColor = palette.muted
+                )
+            )
         }
     }
     Spacer(Modifier.height(9.dp))
@@ -1118,10 +1162,12 @@ private fun QuickDestinations(
                 val favicon = remember(site.host, faviconRevision) { icons.load(site.host) }
                 Column(
                     modifier = Modifier.weight(1f)
-                        .background(palette.surface, RoundedCornerShape(19.dp))
-                        .border(1.dp, palette.outline, RoundedCornerShape(19.dp))
+                        .background(palette.surface, RoundedCornerShape(20.dp))
+                        .border(1.dp, palette.outline.copy(alpha = 0.38f),
+                            RoundedCornerShape(20.dp))
                         .clickable { openUrl(site.url) }
-                        .padding(14.dp)
+                        .heightIn(min = 115.dp)
+                        .padding(15.dp)
                 ) {
                     if (favicon != null) {
                         Image(bitmap = favicon.asImageBitmap(),
@@ -1132,13 +1178,13 @@ private fun QuickDestinations(
                             tint = palette.accent, modifier = Modifier.size(31.dp))
                     }
                     Spacer(Modifier.height(9.dp))
-                    Text(site.host, color = palette.text, fontSize = 13.sp,
+                    Text(site.host, color = palette.text, fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
                     Text(if (site.visits == 1) "1 visit"
                          else if (site.visits > 1) site.visits.toString() + " visits"
                          else "Bookmarked",
-                        color = palette.muted, fontSize = 11.sp,
+                        color = palette.muted, fontSize = 12.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
