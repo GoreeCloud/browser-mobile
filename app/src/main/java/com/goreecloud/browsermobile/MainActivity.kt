@@ -25,6 +25,7 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -139,6 +140,13 @@ class MainActivity : ComponentActivity() {
             val preferences = remember { BrowserPreferences(applicationContext) }
             val isDark = androidx.compose.foundation.isSystemInDarkTheme()
             val palette = if (isDark) DarkGc else LightGc
+            // Android 15+ draws behind the system bars. Match icon contrast to our canvas.
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !isDark
+                    isAppearanceLightNavigationBars = !isDark
+                }
+            }
             MaterialTheme(colorScheme = if (isDark) darkColorScheme(
                 primary = palette.accent, background = palette.canvas,
                 surface = palette.surface, onSurface = palette.text

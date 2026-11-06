@@ -45,7 +45,7 @@ The app targets Android 8.0+ (API 26) and SDK 35. A passing build is **not** suf
 
 ## Architecture and development
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component boundaries, privacy trade-offs, and risk-based acceptance. CI compiles the native APK, runs JVM unit tests, and executes Android Lint. The full APK delivery requirement is governed by GoreeCloud's canonical Google Drive instructions: installable APKs delivered for testing must be placed individually in `GoreeCloud/Artifacts/` after build provenance and identity checks, not delivered as GitHub Actions ZIPs.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component boundaries, privacy trade-offs, and risk-based acceptance. [Android device acceptance notes](docs/DEVICE_ACCEPTANCE.md) record bounded physical Android 16 smoke tests, corrected light/dark system-bar contrast, and remaining release gaps. CI compiles the native APK, runs JVM unit tests, executes Android Lint, and temporarily retains its debug APK as a 7-day internal Actions artifact. **A CI debug APK may be signed with a different certificate from the locally installed build.** The full APK delivery requirement is governed by GoreeCloud's canonical Google Drive instructions: installable APKs delivered for testing must be placed individually in `GoreeCloud/Artifacts/` after build provenance and identity checks, not delivered as GitHub Actions ZIPs.
 
 ## Open source
 
