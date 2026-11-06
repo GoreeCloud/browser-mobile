@@ -37,3 +37,17 @@
 - Debug APK signatures depend on the build environment. A CI-built APK may not update an APK signed by a different local debug keystore; verify certificate identity before attempting in-place installation.
 - No production signing, Play distribution, Stable declaration or deployment occurred. Search remains Startpage-only until GoreeCloud Search passes its separate stability gate.
 - Screenshots contain status-bar details and were not added to the public repository. The above observations are a de-identified evidence summary, not an immutable external test lab report.
+
+## November 6 UI/Webspaces redesign smoke test (additional)
+
+The same authorized OnePlus N200 / Android 16 handset received an **in-place upgrade** of the locally debug-signed APK. Installation succeeded and the app launched. Bounded screenshots and app-private preference inspection confirmed:
+
+- The existing G-vector launcher artwork now appears in the header instead of text-only "G"; the top privacy badge is gone.
+- The Home banner is removed. The Quick Destinations selector shows **Recent / Favorites / Most visited**; initial empty state did not show synthetic letter placeholders.
+- A successful visit to `https://example.com/` created a single app-private history entry containing only `example.com`, count and timestamp. Home then showed it in Recent with a neutral globe fallback.
+- A visit to `https://www.wikipedia.org/` created a second host-only entry and saved one ~4.4 KiB favicon in app-private `files/site-favicons/` from WebView. No third-party favicon collection endpoint is used.
+- The tab icon visibly shows **1**, and the three-dot toolbar menu renders as a small, anchored pop-up instead of the former full-width draggable sheet. The menu opens the Webspaces organizer.
+- The Webspaces organizer renders built-in spaces and visibly warns that WebView cookies and signed-in accounts are **not isolated**. It shows tab counts and supports local custom-space configuration, exact-host routing and manual tab moves in source.
+- One-device screenshots are visual smoke evidence, not a comprehensive accessibility, privacy, site routing or Android-version matrix.
+
+No new images were generated for the redesign. **Product-specific official Browser Mobile logo/icon/artwork is still missing from the central brand-assets catalog**; the existing Android launcher vector was reused only. The retained debug app is not a production-ready release.

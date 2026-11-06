@@ -26,6 +26,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -74,11 +77,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.goreecloud.browsermobile.core.BrowsingLibrary
+import com.goreecloud.browsermobile.core.SiteIcons
+import com.goreecloud.browsermobile.core.WebspacesManager
 import com.goreecloud.browsermobile.core.BrowserPreferences
 import com.goreecloud.browsermobile.core.NavigationPolicy
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
+import com.goreecloud.browsermobile.core.VisitPolicy
+import com.goreecloud.browsermobile.core.VisitedSite
 import com.goreecloud.browsermobile.core.SiteExceptions
 import com.goreecloud.browsermobile.core.SearchPolicy
 import com.goreecloud.browsermobile.core.UrlCleaner
@@ -88,7 +96,8 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private enum class Surface { NEW_TAB, HOME, WEB }
-private enum class Panel { TABS, PRIVACY, MENU }
+private enum class Panel { TABS, PRIVACY, WEBSPACES }
+private enum class DestinationMode { RECENT, FAVORITES, MOST }
 
 private class BrowserTab {
     val id: String = UUID.randomUUID().toString()
@@ -96,6 +105,8 @@ private class BrowserTab {
     var url by mutableStateOf("")
     @Volatile var requestTopLevelUrl: String = ""
     var title by mutableStateOf("New Tab")
+    var webspaceId by mutableStateOf("standard")
+    var pinnedWebspace by mutableStateOf(false)
     var loading by mutableStateOf(false)
     var progress by mutableIntStateOf(0)
     var blocked by mutableIntStateOf(0)
@@ -178,6 +189,10 @@ private fun configureWebView(
     tab: BrowserTab,
     preferences: BrowserPreferences,
     filterLists: FilterListEngine,
+    library: BrowsingLibrary,
+    webspaces: WebspacesManager,
+    icons: SiteIcons,
+    onFaviconSaved: () -> Unit,
     onUrlCleaned: (Int) -> Unit
 ): WebView {
     val webView = WebView(activity)
@@ -230,6 +245,7 @@ private fun configureWebView(
             if (url != null && NavigationPolicy.isHttpUrl(url)) {
                 tab.url = url
                 tab.requestTopLevelUrl = url
+                if (!tab.pinnedWebspace) tab.webspaceId = webspaces.destination(url)
             }
         }
 
@@ -240,6 +256,9 @@ private fun configureWebView(
                 tab.requestTopLevelUrl = url
             }
             tab.title = view.title?.takeIf { it.isNotBlank() } ?: "Website"
+            if (!url.isNullOrBlank() && url.startsWith("https://", true)) {
+                library.record(url)
+            }
         }
 
         override fun onReceivedError(
@@ -261,6 +280,10 @@ private fun configureWebView(
         }
     }
     webView.webChromeClient = object : WebChromeClient() {
+        override fun onReceivedIcon(view: WebView, icon: Bitmap) {
+            val url = view.url ?: return
+            if (library.historyEnabled && icons.save(url, icon)) onFaviconSaved()
+        }
         override fun onProgressChanged(view: WebView, newProgress: Int) {
             tab.progress = newProgress
         }
@@ -287,6 +310,10 @@ private fun BrowserApp(
 ) {
     val filterLists = remember { FilterListEngine(activity.applicationContext, preferences.blockAds) }
     DisposableEffect(filterLists) { onDispose { filterLists.close() } }
+    val library = remember { BrowsingLibrary(activity.applicationContext) }
+    val icons = remember { SiteIcons(activity.applicationContext) }
+    val webspaces = remember { WebspacesManager(activity.applicationContext) }
+    var faviconRevision by remember { mutableIntStateOf(0) }
     val tabs = remember { mutableStateListOf(BrowserTab()) }
     var activeId by remember { mutableStateOf(tabs.first().id) }
     val current = tabs.firstOrNull { it.id == activeId } ?: tabs.first()
@@ -300,21 +327,33 @@ private fun BrowserApp(
         if (resolved.isBlank()) return
         current.error = null
         current.url = resolved
+        if (!current.pinnedWebspace) current.webspaceId = webspaces.destination(resolved)
         current.requestTopLevelUrl = resolved
         current.surface = Surface.WEB
         current.webView?.loadUrl(resolved)
         focus.clearFocus()
     }
 
-    fun openNewTab() {
+    fun openNewTab(webspace: String? = null) {
         if (tabs.size >= 12) {
             panel = Panel.TABS
             return
         }
-        val tab = BrowserTab()
+        val tab = BrowserTab().apply {
+            webspaceId = webspace ?: current.webspaceId
+            pinnedWebspace = webspace != null
+        }
         tabs.add(tab)
         activeId = tab.id
         panel = null
+    }
+
+    fun openWebspace(id: String) {
+        val found = tabs.firstOrNull { it.webspaceId == id }
+        if (found != null) {
+            activeId = found.id
+            panel = null
+        } else openNewTab(id)
     }
 
     fun closeTab(tab: BrowserTab) {
@@ -322,6 +361,7 @@ private fun BrowserApp(
             tab.webView?.destroy()
             tab.webView = null
             tab.url = ""
+            tab.pinnedWebspace = false
             tab.requestTopLevelUrl = ""
             tab.title = "New Tab"
             tab.surface = Surface.NEW_TAB
@@ -371,25 +411,18 @@ private fun BrowserApp(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("G", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF10162B))
+                    Image(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = "GoreeCloud Browser Mobile app mark",
+                        modifier = Modifier.size(31.dp)
+                    )
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("GoreeCloud", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text("BROWSER MOBILE", color = palette.muted, fontSize = 9.sp, letterSpacing = 2.sp)
                 }
-                Surface(
-                    modifier = Modifier.clickable { panel = Panel.PRIVACY },
-                    color = palette.surfaceAlt, shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, palette.outline)
-                ) {
-                    Row(modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, null, tint = palette.success, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Private by design", color = palette.text, fontSize = 11.sp)
-                    }
-                }
+                // The privacy controls remain available from the overflow menu.
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp)
@@ -440,6 +473,7 @@ private fun BrowserApp(
                     )
                     Surface.HOME -> HomePage(
                         palette = palette, preferences = preferences,
+                        library = library, icons = icons, faviconRevision = faviconRevision,
                         blocked = tabs.sumOf { it.blocked },
                         cleaned = cleanedCount,
                         openUrl = ::openUrl,
@@ -450,9 +484,10 @@ private fun BrowserApp(
                             AndroidView(
                                 factory = { context ->
                                     val view = current.webView
-                                        ?: configureWebView(activity, current, preferences, filterLists) {
-                                            cleanedCount += it
-                                        }
+                                        ?: configureWebView(
+                                            activity, current, preferences, filterLists,
+                                            library, webspaces, icons, { faviconRevision++ }
+                                        ) { cleanedCount += it }
                                     (view.parent as? ViewGroup)?.removeView(view)
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(
                                         view, preferences.thirdPartyCookies
@@ -506,8 +541,16 @@ private fun BrowserApp(
                 }
                 DockButton(Icons.Default.Home, "Home", palette) { current.surface = Surface.HOME }
                 DockButton(Icons.Default.Add, "New tab", palette, accent = true) { openNewTab() }
-                DockButton(Icons.Default.Tab, "Tabs: ${tabs.size}", palette) { panel = Panel.TABS }
-                DockButton(Icons.Default.MoreVert, "Menu", palette) { panel = Panel.MENU }
+                TabCountDock(tabs.size, palette) { panel = Panel.TABS }
+                BrowserOverflowMenu(
+                    tab = current,
+                    preferences = preferences,
+                    palette = palette,
+                    activity = activity,
+                    onPrivacy = { panel = Panel.PRIVACY },
+                    onWebspaces = { panel = Panel.WEBSPACES },
+                    onHome = { current.surface = Surface.HOME }
+                )
             }
             Spacer(Modifier.height(5.dp))
         }
@@ -539,6 +582,8 @@ private fun BrowserApp(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(tab.title, color = palette.text, maxLines = 1,
                                         overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
+                                        ?: "Standard", color = palette.accent, fontSize = 10.sp)
                                     Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
                                         color = palette.muted, fontSize = 12.sp, maxLines = 1,
                                         overflow = TextOverflow.Ellipsis)
@@ -553,36 +598,20 @@ private fun BrowserApp(
                         Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
                     }
                 }
-                Panel.PRIVACY -> PrivacyPanel(activity, current, preferences, filterLists, palette, cleanedCount)
-                Panel.MENU -> {
-                    SheetHeading("Explore more", "Actions for this page", palette)
-                    SheetAction(Icons.Default.Refresh, "Reload page", palette) {
-                        current.webView?.reload(); panel = null
-                    }
-                    SheetAction(Icons.Default.Bookmark,
-                        if (current.url in preferences.savedSites) "Remove bookmark" else "Bookmark page",
-                        palette) {
-                        preferences.toggleBookmark(current.url); panel = null
-                    }
-                    SheetAction(Icons.Default.Share, "Share page", palette) {
-                        if (NavigationPolicy.isHttpUrl(current.url)) {
-                            activity.startActivity(Intent.createChooser(
-                                Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, current.url)
-                                }, "Share link"
-                            ))
+                Panel.PRIVACY -> PrivacyPanel(
+                    activity, current, preferences, filterLists, palette, cleanedCount, library, icons
+                )
+                Panel.WEBSPACES -> WebspacesPanel(
+                    webspaces = webspaces, tabs = tabs, current = current, palette = palette,
+                    open = ::openWebspace,
+                    onRemove = { id ->
+                        tabs.filter { it.webspaceId == id }.forEach { tab ->
+                            tab.webspaceId = "standard"
+                            tab.pinnedWebspace = false
                         }
-                        panel = null
+                        webspaces.remove(id)
                     }
-                    SheetAction(Icons.Default.Shield, "Privacy & DNS manager", palette) {
-                        panel = Panel.PRIVACY
-                    }
-                    SheetAction(Icons.Default.Home, "Open Home", palette) {
-                        current.surface = Surface.HOME; panel = null
-                    }
-                    Spacer(Modifier.height(26.dp))
-                }
+                )
                 null -> Unit
             }
         }
@@ -730,6 +759,9 @@ private fun SuggestionRow(
 private fun HomePage(
     palette: GcPalette,
     preferences: BrowserPreferences,
+    library: BrowsingLibrary,
+    icons: SiteIcons,
+    faviconRevision: Int,
     blocked: Int,
     cleaned: Int,
     openUrl: (String) -> Unit,
@@ -743,49 +775,7 @@ private fun HomePage(
             LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d"))
         }
         Text(today.uppercase(), color = palette.muted, letterSpacing = 1.8.sp, fontSize = 10.sp)
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(29.dp))
-                .background(Brush.linearGradient(
-                    listOf(Color(0xFF3B4292), Color(0xFF23396C), Color(0xFF174C60))
-                ))
-        ) {
-            Column(modifier = Modifier.padding(25.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(9.dp).background(Color(0xFF80F0D1), CircleShape)
-                    )
-                    Spacer(Modifier.width(9.dp))
-                    Text("YOUR PERSONAL WEB SPACE", color = Color(0xFFDCE7FF),
-                        fontSize = 10.sp, letterSpacing = 1.6.sp)
-                }
-                Spacer(Modifier.height(25.dp))
-                Text(
-                    "Make the web\nyours.",
-                    color = Color.White, fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold, lineHeight = 40.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "A quieter place to browse, discover, and keep what matters.",
-                    color = Color(0xFFE4EAFB), fontSize = 13.sp, lineHeight = 19.sp
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { openUrl(SearchPolicy.HOME_URL) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White, contentColor = Color(0xFF1D2D59)
-                    ),
-                    shape = RoundedCornerShape(15.dp)
-                ) {
-                    Icon(Icons.Default.Search, null, modifier = Modifier.size(19.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Start exploring", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Privacy at a glance", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = palette.text, modifier = Modifier.weight(1f))
@@ -808,53 +798,7 @@ private fun HomePage(
             )
         }
         Spacer(Modifier.height(27.dp))
-        Text("Quick destinations", fontSize = 20.sp,
-            fontWeight = FontWeight.Bold, color = palette.text)
-        Spacer(Modifier.height(13.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Destination("Startpage", "Private search", "S",
-                Color(0xFF6B77DE), palette, Modifier.weight(1f)) {
-                openUrl("https://www.startpage.com")
-            }
-            Destination("Wikipedia", "Free knowledge", "W",
-                Color(0xFF3D9B9E), palette, Modifier.weight(1f)) {
-                openUrl("https://www.wikipedia.org")
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Destination("GitHub", "Create & build", "GH",
-                Color(0xFF7564B5), palette, Modifier.weight(1f)) {
-                openUrl("https://github.com")
-            }
-            Destination("Internet Archive", "Preserve the web", "IA",
-                Color(0xFF9A7956), palette, Modifier.weight(1f)) {
-                openUrl("https://archive.org")
-            }
-        }
-        if (preferences.savedSites.isNotEmpty()) {
-            Spacer(Modifier.height(25.dp))
-            Text("Saved places", color = palette.text, fontSize = 20.sp,
-                fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            preferences.savedSites.take(5).forEach { url ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        .clickable { openUrl(url) }
-                        .padding(vertical = 9.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Bookmark, null, tint = palette.accent,
-                        modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(url, color = palette.text, fontSize = 13.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.ArrowForward, null, tint = palette.muted,
-                        modifier = Modifier.size(17.dp))
-                }
-            }
-        }
+        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
         Spacer(Modifier.height(25.dp))
     }
 }
@@ -876,35 +820,6 @@ private fun PrivacyStat(
         Spacer(Modifier.height(13.dp))
         Text(count, color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold)
         Text(name, color = palette.muted, fontSize = 11.sp)
-    }
-}
-
-@Composable
-private fun Destination(
-    title: String,
-    subtitle: String,
-    initial: String,
-    tint: Color,
-    palette: GcPalette,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = modifier.background(palette.surface, RoundedCornerShape(22.dp))
-            .border(1.dp, palette.outline, RoundedCornerShape(22.dp))
-            .clickable(onClick = onClick).padding(15.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(41.dp).background(tint.copy(alpha = 0.2f),
-                RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(initial, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Black)
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(title, color = palette.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(subtitle, color = palette.muted, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -968,7 +883,9 @@ private fun PrivacyPanel(
     preferences: BrowserPreferences,
     filterLists: FilterListEngine,
     palette: GcPalette,
-    cleanedCount: Int
+    cleanedCount: Int,
+    library: BrowsingLibrary,
+    icons: SiteIcons
 ) {
     val message = remember { mutableStateOf("") }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
@@ -1018,6 +935,23 @@ private fun PrivacyPanel(
             "Removes recognized marketing parameters from links.",
             preferences.cleanUrls, palette, preferences::updateCleanUrls
         )
+        PrivacyToggle(
+            "Remember visited websites",
+            "Keeps up to 100 website hosts locally for Recent and Most Visited; no URLs or search terms.",
+            library.historyEnabled, palette, { enabled ->
+                library.updateHistoryEnabled(enabled)
+                if (!enabled) {
+                    library.clear()
+                    icons.clear()
+                    message.value = "Local website history and favicons cleared"
+                }
+            }
+        )
+        SheetAction(Icons.Default.Delete, "Clear recent websites and favicons", palette) {
+            library.clear()
+            icons.clear()
+            message.value = "Local website history and saved favicons cleared"
+        }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         Text("FILTER SUBSCRIPTIONS", color = palette.muted, fontSize = 10.sp,
             letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
@@ -1094,5 +1028,228 @@ private fun PrivacyPanel(
                 fontSize = 12.sp)
         }
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun QuickDestinations(
+    library: BrowsingLibrary, preferences: BrowserPreferences, icons: SiteIcons,
+    faviconRevision: Int, palette: GcPalette, openUrl: (String) -> Unit
+) {
+    var mode by remember { mutableStateOf(DestinationMode.RECENT) }
+    val favorites = preferences.savedSites.mapNotNull { url ->
+        val host = VisitPolicy.host(url) ?: return@mapNotNull null
+        val entry = library.sites.firstOrNull { it.host == host }
+        VisitedSite(host, entry?.visits ?: 0, entry?.lastVisitedMs ?: 0)
+    }.distinctBy { it.host }.take(8)
+    val sites = when (mode) {
+        DestinationMode.RECENT -> library.sites.sortedByDescending { it.lastVisitedMs }.take(8)
+        DestinationMode.FAVORITES -> favorites
+        DestinationMode.MOST -> library.sites.sortedWith(
+            compareByDescending<VisitedSite> { it.visits }.thenByDescending { it.lastVisitedMs }
+        ).take(8)
+    }
+    Text("Quick destinations", fontSize = 20.sp,
+        fontWeight = FontWeight.Bold, color = palette.text)
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        listOf(DestinationMode.RECENT to "Recent",
+            DestinationMode.FAVORITES to "Favorites",
+            DestinationMode.MOST to "Most visited").forEach { (option, label) ->
+            FilterChip(selected = mode == option, onClick = { mode = option },
+                label = { Text(label, fontSize = 11.sp) })
+        }
+    }
+    Spacer(Modifier.height(9.dp))
+    if (sites.isEmpty()) {
+        Text(
+            if (mode == DestinationMode.FAVORITES)
+                "Bookmark a website to add a favorite destination."
+            else "Websites you visit will appear here. Only website hosts are saved on this device.",
+            color = palette.muted, fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 17.dp)
+        )
+    }
+    sites.chunked(2).forEach { pair ->
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+            pair.forEach { site ->
+                val favicon = remember(site.host, faviconRevision) { icons.load(site.host) }
+                Column(
+                    modifier = Modifier.weight(1f)
+                        .background(palette.surface, RoundedCornerShape(19.dp))
+                        .border(1.dp, palette.outline, RoundedCornerShape(19.dp))
+                        .clickable { openUrl(site.url) }
+                        .padding(14.dp)
+                ) {
+                    if (favicon != null) {
+                        Image(bitmap = favicon.asImageBitmap(),
+                            contentDescription = site.host + " favicon",
+                            modifier = Modifier.size(31.dp))
+                    } else {
+                        Icon(Icons.Default.Language, contentDescription = "Website",
+                            tint = palette.accent, modifier = Modifier.size(31.dp))
+                    }
+                    Spacer(Modifier.height(9.dp))
+                    Text(site.host, color = palette.text, fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                    Text(if (site.visits == 1) "1 visit"
+                         else if (site.visits > 1) site.visits.toString() + " visits"
+                         else "Bookmarked",
+                        color = palette.muted, fontSize = 11.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (pair.size == 1) Spacer(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun TabCountDock(count: Int, palette: GcPalette, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(47.dp)) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Tab, contentDescription = "Tabs: $count",
+                modifier = Modifier.size(28.dp), tint = palette.text)
+            Text(count.toString(), fontSize = if (count >= 10) 10.sp else 12.sp,
+                fontWeight = FontWeight.ExtraBold, color = palette.accent,
+                modifier = Modifier.padding(top = 1.dp))
+        }
+    }
+}
+
+@Composable
+private fun WebspacesPanel(
+    webspaces: WebspacesManager, tabs: List<BrowserTab>,
+    current: BrowserTab, palette: GcPalette,
+    open: (String) -> Unit, onRemove: (String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        SheetHeading("Webspaces", "Organize tabs and route sites", palette)
+        Text("Tab groups currently share WebView cookies; accounts are not isolated.",
+            color = palette.muted, fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp))
+        webspaces.entries.forEach { space ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 4.dp)
+                    .background(palette.surfaceAlt, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Language, null, tint = palette.accent)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f).clickable { open(space.id) }
+                    .padding(vertical = 10.dp)) {
+                    Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold)
+                    val count = tabs.count { it.webspaceId == space.id }
+                    Text(count.toString() + if (count == 1) " tab · Open" else " tabs · Open",
+                        color = palette.muted, fontSize = 11.sp)
+                }
+                if (current.surface == Surface.WEB) {
+                    IconButton(onClick = {
+                        current.webspaceId = space.id
+                        current.pinnedWebspace = true
+                    }) {
+                        Icon(Icons.Default.ArrowForward,
+                            "Move current tab to " + space.name, tint = palette.accent)
+                    }
+                    TextButton(onClick = {
+                        webspaces.assign(current.url, space.id)
+                        current.webspaceId = space.id
+                        current.pinnedWebspace = false
+                    }) { Text("Route", fontSize = 11.sp) }
+                }
+                if (space.id.startsWith("custom-")) {
+                    IconButton(onClick = { onRemove(space.id) }) {
+                        Icon(Icons.Default.Delete, "Remove Webspace", tint = palette.muted)
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(value = name, onValueChange = { name = it.take(30) },
+                label = { Text("Custom Webspace") }, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = { if (webspaces.create(name) != null) name = "" }) {
+                Text("Add")
+            }
+        }
+        if (current.surface == Surface.WEB &&
+            VisitPolicy.host(current.url) in webspaces.assignments) {
+            TextButton(
+                onClick = {
+                    webspaces.removeAssignment(current.url)
+                    current.webspaceId = webspaces.destination(current.url)
+                    current.pinnedWebspace = false
+                }, modifier = Modifier.padding(start = 18.dp)
+            ) { Text("Remove this site's routing rule") }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun BrowserOverflowMenu(
+    tab: BrowserTab, preferences: BrowserPreferences,
+    palette: GcPalette, activity: Activity,
+    onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        DockButton(Icons.Default.MoreVert, "Menu", palette) { expanded = true }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(palette.surface)
+        ) {
+            DropdownMenuItem(
+                text = { Text("Webspaces") },
+                leadingIcon = { Icon(Icons.Default.Language, null) },
+                onClick = { expanded = false; onWebspaces() }
+            )
+            DropdownMenuItem(
+                text = { Text("Reload page") },
+                leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                enabled = tab.surface == Surface.WEB,
+                onClick = { expanded = false; tab.webView?.reload() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (tab.url in preferences.savedSites)
+                    "Remove bookmark" else "Bookmark page") },
+                leadingIcon = { Icon(Icons.Default.Bookmark, null) },
+                enabled = tab.surface == Surface.WEB,
+                onClick = { expanded = false; preferences.toggleBookmark(tab.url) }
+            )
+            DropdownMenuItem(
+                text = { Text("Share page") },
+                leadingIcon = { Icon(Icons.Default.Share, null) },
+                enabled = tab.surface == Surface.WEB,
+                onClick = {
+                    expanded = false
+                    if (NavigationPolicy.isHttpUrl(tab.url)) {
+                        activity.startActivity(Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, tab.url)
+                            }, "Share link"
+                        ))
+                    }
+                }
+            )
+            HorizontalDivider(color = palette.outline)
+            DropdownMenuItem(
+                text = { Text("Privacy & DNS manager") },
+                leadingIcon = { Icon(Icons.Default.Shield, null) },
+                onClick = { expanded = false; onPrivacy() }
+            )
+            DropdownMenuItem(
+                text = { Text("Home") },
+                leadingIcon = { Icon(Icons.Default.Home, null) },
+                onClick = { expanded = false; onHome() }
+            )
+        }
     }
 }

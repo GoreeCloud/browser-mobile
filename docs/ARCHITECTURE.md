@@ -6,6 +6,9 @@
 - `core/NavigationPolicy.kt`: HTTPS-first address resolution, upgraded HTTP navigation without downgrade fallback, non-GET rewrite rejection, search fallback, tracking parameter normalization and starter domain blocklist.
 - `core/BrowserPreferences.kt`: app-private preference, bookmark and site-exception persistence; WebView CookieManager toggles. The request-thread blocking switch and each tab's top-level page URL use volatile snapshots rather than reading Compose mutable state from WebView background callbacks.
 - `core/SiteExceptions.kt`: exact-host, HTTP(S)-only per-site filter exceptions with no automatic subdomain exemptions.
+- `core/BrowsingLibrary.kt`: bounded, app-private, optional recent/most-visited website host index. Records hostname, visit count, and timestamp only; never persists URL path, query, fragment, or page title. Clear/pause controls are in Privacy Center; no cross-device sync.
+- `core/SiteIcons.kt`: app-private, per-host favicon cache using only WebView-reported page icons, not external favicon collection services. Files are size and count bounded and user-clearable.
+- `core/Webspaces.kt`: organizational Webspaces definitions, explicit exact-host assignments, built-in provider routing, and bounded persisted custom spaces. **Not isolated Android WebView storage or authentication sessions.** See [Webspaces preview](WEBSPACES.md).
 - Android WebView is the system website renderer, **not** an independently maintained browser engine.
 - Browser app data is app-private. The manifest disables Android Auto Backup, and `res/xml/data_extraction_rules.xml` excludes all browser data from Android 12+ cloud backup and device-to-device transfer. Both platform and OEM behavior still require device validation.
 
@@ -24,10 +27,10 @@
 1. Expand the initial OISD/StevenBlack subscription engine with per-site exception UX testing (implemented as an exact-host toggle), richer filter syntaxes where technically feasible, offline startup testing and performance measurements.
 2. Implement accurate per-site cookies, site permission prompts, downloads and safe file upload policy.
 3. Review browser role handling, deep links, unobserved redirect classes, local-network access and threat-model regressions; the initial HTTPS-first upgrade is implemented and unit-tested but not a complete WebView security audit.
-4. Add persistent tab sessions, site history with private-mode boundaries and user-controlled retention.
+4. Implement persistent tab sessions, true private-mode boundaries and stronger history retention controls. The initial user-disableable/clearable website-host visit index is not a complete browsing-history implementation.
 5. Complete accessibility, screen-reader, contrast, landscape, keyboard, dark/light and real-device WebView testing.
 6. Add integration/instrumentation tests and dependency/provenance scans; verify signing and APK delivery through the approved Drive Artifacts location.
 
 ## GC UI
 
-Visual composition adopts the governing GoreeCloud UI principles: Canvas / Surface / Lens hierarchy, Iris semantic palette inspiration, 12/18/26/36 corner progression, 4dp spacing rhythm and 44dp+ touch actions. Precise official native token parity and actual rendered visual acceptance have **not** yet been verified.
+Visual composition adopts the governing GoreeCloud UI principles: Canvas / Surface / Lens hierarchy, Iris semantic palette inspiration, 12/18/26/36 corner progression, 4dp spacing rhythm and 44dp+ touch actions. The three-dot overflow is an anchored pop-up, tabs show a count, and Home displays real website hosts with WebView favicons instead of permanent letter placeholders. The oversized Home hero and top privacy badge were removed. The existing launcher vector is reused in the header but has not been adopted as a centrally governed, product-specific official asset. Precise official native token parity and final rendered acceptance have **not** yet been verified.
