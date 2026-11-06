@@ -75,7 +75,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.goreecloud.browsermobile.core.BrowserPreferences
 import com.goreecloud.browsermobile.core.NavigationPolicy
-import com.goreecloud.browsermobile.core.RequestBlocker
+import com.goreecloud.browsermobile.core.FilterListEngine
+import com.goreecloud.browsermobile.core.FilterListStatus
+import com.goreecloud.browsermobile.core.FilterSource
 import com.goreecloud.browsermobile.core.SearchPolicy
 import com.goreecloud.browsermobile.core.UrlCleaner
 import java.io.ByteArrayInputStream
@@ -165,6 +167,7 @@ private fun configureWebView(
     activity: Activity,
     tab: BrowserTab,
     preferences: BrowserPreferences,
+    filterLists: FilterListEngine,
     onUrlCleaned: (Int) -> Unit
 ): WebView {
     val webView = WebView(activity)
@@ -206,7 +209,7 @@ private fun configureWebView(
             request: WebResourceRequest
         ): WebResourceResponse? {
             if (preferences.blockAds && !request.isForMainFrame &&
-                RequestBlocker.shouldBlock(request.url.toString())) {
+                filterLists.shouldBlock(request.url.toString())) {
                 mainHandler.post { tab.blocked++ }
                 return WebResourceResponse(
                     "text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0))
@@ -270,6 +273,8 @@ private fun BrowserApp(
     incomingUrl: String?,
     consumeIncomingUrl: () -> Unit
 ) {
+    val filterLists = remember { FilterListEngine(activity.applicationContext, preferences.blockAds) }
+    DisposableEffect(filterLists) { onDispose { filterLists.close() } }
     val tabs = remember { mutableStateListOf(BrowserTab()) }
     var activeId by remember { mutableStateOf(tabs.first().id) }
     val current = tabs.firstOrNull { it.id == activeId } ?: tabs.first()
@@ -431,7 +436,7 @@ private fun BrowserApp(
                             AndroidView(
                                 factory = { context ->
                                     val view = current.webView
-                                        ?: configureWebView(activity, current, preferences) {
+                                        ?: configureWebView(activity, current, preferences, filterLists) {
                                             cleanedCount += it
                                         }
                                     (view.parent as? ViewGroup)?.removeView(view)
@@ -534,7 +539,7 @@ private fun BrowserApp(
                         Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
                     }
                 }
-                Panel.PRIVACY -> PrivacyPanel(activity, current, preferences, palette, cleanedCount)
+                Panel.PRIVACY -> PrivacyPanel(activity, current, preferences, filterLists, palette, cleanedCount)
                 Panel.MENU -> {
                     SheetHeading("Explore more", "Actions for this page", palette)
                     SheetAction(Icons.Default.Refresh, "Reload page", palette) {
@@ -947,6 +952,7 @@ private fun PrivacyPanel(
     activity: Activity,
     tab: BrowserTab,
     preferences: BrowserPreferences,
+    filterLists: FilterListEngine,
     palette: GcPalette,
     cleanedCount: Int
 ) {
@@ -971,14 +977,51 @@ private fun PrivacyPanel(
         }
         PrivacyToggle(
             "Built-in ad & tracker blocking",
-            "Conservative request-domain list. Not cosmetic filtering.",
-            preferences.blockAds, palette, preferences::updateBlockAds
+            "OISD Small and StevenBlack Unified are enabled by default.",
+            preferences.blockAds, palette, { enabled ->
+                preferences.updateBlockAds(enabled)
+                if (enabled) filterLists.refresh()
+            }
         )
         PrivacyToggle(
             "URL cleaner",
             "Removes recognized marketing parameters from links.",
             preferences.cleanUrls, palette, preferences::updateCleanUrls
         )
+        HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
+        Text("FILTER SUBSCRIPTIONS", color = palette.muted, fontSize = 10.sp,
+            letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))
+        Text(
+            "OISD Small + StevenBlack Unified are the default pair. Other lists are opt-in. " +
+                "Downloaded rules stay on this device and apply to page subresources only.",
+            color = palette.muted, fontSize = 12.sp, lineHeight = 17.sp,
+            modifier = Modifier.padding(horizontal = 23.dp, vertical = 10.dp)
+        )
+        FilterSource.entries.forEach { source ->
+            val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
+            val readiness = when {
+                !state.enabled -> "Off"
+                state.updating && !state.hasCache -> "Downloading…"
+                state.updateFailed && state.hasCache -> "Using saved list · update failed"
+                state.updateFailed -> "Unavailable · retry download"
+                state.hasCache -> state.domains.toString() + " domains loaded"
+                else -> "Waiting for first download"
+            }
+            PrivacyToggle(
+                source.title,
+                source.summary + " · " + readiness,
+                state.enabled, palette,
+                { enabled -> filterLists.setEnabled(source, enabled) }
+            )
+        }
+        Text(
+            filterLists.activeRuleCount.toString() + " unique active domains. Some ads cannot be blocked.",
+            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp),
+            color = palette.muted, fontSize = 12.sp
+        )
+        SheetAction(Icons.Default.Refresh, "Update enabled lists now", palette) {
+            filterLists.refresh(force = true)
+        }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         Text("COOKIES & SITE DATA", color = palette.muted, fontSize = 10.sp,
             letterSpacing = 1.5.sp, modifier = Modifier.padding(start = 23.dp, top = 17.dp))

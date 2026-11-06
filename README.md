@@ -10,7 +10,7 @@ GoreeCloud Browser Mobile is an original, privacy-oriented Android browser built
 - **Startpage search by default**, with a fixed, documented policy that prevents premature migration to GoreeCloud Search.
 - **Native tabs** (up to 12 per session), back/forward, address/search field, reload, web sharing, and lightweight bookmarks.
 - **URL cleaning** for a conservative set of known advertising/campaign parameter names. Necessary non-tracking query parameters are preserved.
-- **Built-in request blocking** for a small, auditable list of tracker/ad domains. This does not claim full ad removal, cosmetic filtering or exhaustive protection.
+- **Built-in ad/tracker domain subscriptions**: OISD Small and StevenBlack Unified are **enabled by default**. The user can opt into OISD Big (replaces Small), OISD NSFW Small, or StevenBlack Gambling; disabled lists do not download. Lists are fetched only over HTTPS, updated at app startup when older than 24 hours, locally cached with last-known-good fallback, and manually refreshable. This provides domain-based WebView subresource filtering only—not cosmetic filtering or exhaustive ad blocking. See [filter subscription policy](docs/FILTER_SUBSCRIPTIONS.md).
 - **Cookie controls** for global cookie acceptance, third-party cookies (off by default), and explicit clearing of cookie and web-storage data.
 - **System DNS manager entry point** to Android Private DNS settings. Android WebView uses the OS DNS stack; per-app custom DNS/DoH is **not** implemented.
 - **Modern GC UI-inspired Iris treatment** with system light/dark modes, branded launcher artwork, clear bottom navigation, and touch-friendly settings.
@@ -36,7 +36,7 @@ The app targets Android 8.0+ (API 26) and SDK 35. A passing build is **not** suf
 - Websites are loaded over the network; browsing is not anonymized. Startpage's external privacy policy applies to searches.
 - JavaScript and DOM storage are enabled for site compatibility.
 - Bookmarks and preferences are stored locally in app-private Android SharedPreferences. Tabs and visited URLs are not synced. Browser websites can still use regular WebView storage unless cleared.
-- Built-in adblocking is a starter domain filter, not the same as uBlock Origin or a maintained filtering engine.
+- Domain-list blocking is not equivalent to uBlock Origin: first-party/same-host ads, cosmetic placeholders, video ads and some requests are not blockable with WebView's subresource interception. The app downloads selected public lists directly from their publishers; subscriptions are unbundled and use the publishers' respective distribution terms.
 - DNS settings are delegated to Android. A dedicated DNS-over-HTTPS resolver would require a separately evaluated networking architecture; exposing a DNS setting does not implement it.
 - Downloads, desktop-site emulation, session restoration, granular site permissions, built-in password management, and per-site cookie deletion remain future work.
 - There has not yet been a full device/browser compatibility, accessibility, privacy leak, or WebView security audit.
@@ -47,4 +47,4 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component boundaries, priva
 
 ## Open source
 
-The GoreeCloud-authored source in this repository is licensed under the [MIT License](LICENSE). Android, Gradle, Kotlin and AndroidX remain third-party components under their own respective licenses; the project does not claim authorship of those dependencies.
+The GoreeCloud-authored source in this repository is licensed under the [MIT License](LICENSE). Public filter-list data is retrieved **separately at runtime** and remains under its owners' licenses: OISD (GPL-3.0) and StevenBlack's aggregated, multi-source hosts data (including upstream attribution/licenses). See [docs/FILTER_SUBSCRIPTIONS.md](docs/FILTER_SUBSCRIPTIONS.md). Android, Gradle, Kotlin and AndroidX are third-party components under their own licenses; GoreeCloud does not claim ownership of those dependencies or of the external list data.
