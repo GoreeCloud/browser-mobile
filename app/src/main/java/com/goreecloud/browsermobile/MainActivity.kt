@@ -637,18 +637,28 @@ private fun BrowserApp(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        if (tab.surface == Surface.WEB) Icons.Default.Language
-                                        else Icons.Default.Home,
+                                        when (tab.surface) {
+                                            Surface.WEB -> Icons.Default.Language
+                                            Surface.HOME -> Icons.Default.Home
+                                            Surface.NEW_TAB -> Icons.Default.Add
+                                        },
                                         null, tint = palette.accent, modifier = Modifier.size(21.dp)
                                     )
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(tab.title, color = palette.text, maxLines = 1,
+                                        Text(
+                                            when (tab.surface) {
+                                                Surface.NEW_TAB -> "New Tab"
+                                                Surface.HOME -> "Home"
+                                                Surface.WEB -> tab.title.ifBlank { "Website" }
+                                            },
+                                            color = palette.text, maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.weight(1f, fill = false))
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
                                         if (tab.id == activeId) {
                                             Spacer(Modifier.width(6.dp))
                                             Text("ACTIVE", color = palette.accent,
@@ -657,9 +667,15 @@ private fun BrowserApp(
                                     }
                                     Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
                                         ?: "Standard", color = palette.accent, fontSize = 12.sp)
-                                    Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
+                                    Text(
+                                        when (tab.surface) {
+                                            Surface.NEW_TAB -> "New tab page"
+                                            Surface.HOME -> "Your places"
+                                            Surface.WEB -> tab.url
+                                        },
                                         color = palette.muted, fontSize = 12.sp, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                                 IconButton(onClick = { closeTab(tab) }) {
                                     Icon(Icons.Default.Close, "Close tab", tint = palette.muted)
