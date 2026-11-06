@@ -1358,6 +1358,9 @@ private fun WebspacesPanel(
 ) {
     var name by remember { mutableStateOf("") }
     var pendingRemove by remember { mutableStateOf<com.goreecloud.browsermobile.core.WebspaceEntry?>(null) }
+    val canCreate = com.goreecloud.browsermobile.core.WebspacePolicy.validName(name) &&
+        webspaces.custom.size < 10 &&
+        webspaces.entries.none { it.name.equals(name.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Webspaces", "Organize tabs and route sites", palette)
         Row(
@@ -1374,66 +1377,123 @@ private fun WebspacesPanel(
                 color = palette.text, fontSize = 13.sp, lineHeight = 19.sp)
         }
         webspaces.entries.forEach { space ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 5.dp)
+            val isCurrent = current.webspaceId == space.id
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 19.dp, vertical = 5.dp)
                     .background(
-                        if (current.webspaceId == space.id) palette.surfaceAlt else palette.surface,
+                        if (isCurrent) palette.surfaceAlt else palette.surface,
                         RoundedCornerShape(18.dp)
                     )
                     .border(
                         1.dp,
-                        if (current.webspaceId == space.id) palette.accent.copy(alpha = 0.65f)
+                        if (isCurrent) palette.accent.copy(alpha = 0.65f)
                         else palette.outline.copy(alpha = 0.38f),
                         RoundedCornerShape(18.dp)
                     )
-                    .clickable { open(space.id) }
-                    .heightIn(min = 70.dp)
-                    .padding(horizontal = 15.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Language, null, tint = palette.accent)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                    Text(space.name, color = palette.text, fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp)
-                    if (current.webspaceId == space.id) {
-                        Text("CURRENT WEBSPACE", color = palette.accent,
-                            fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { open(space.id) }
+                        .heightIn(min = 70.dp)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier.size(38.dp)
+                            .background(palette.surface, RoundedCornerShape(13.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Language, null,
+                            tint = palette.accent, modifier = Modifier.size(22.dp))
                     }
-                    val count = tabs.count { it.webspaceId == space.id }
-                    Text(count.toString() + if (count == 1) " tab" else " tabs",
-                        color = palette.muted, fontSize = 12.sp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(space.name, color = palette.text,
+                            fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        val count = tabs.count { it.webspaceId == space.id }
+                        Text(count.toString() + if (count == 1) " tab" else " tabs",
+                            color = palette.muted, fontSize = 12.sp)
+                        if (isCurrent) {
+                            Text("CURRENT WEBSPACE", color = palette.accent,
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (space.id.startsWith("custom-")) {
+                        IconButton(onClick = { pendingRemove = space }) {
+                            Icon(Icons.Default.Delete,
+                                "Remove " + space.name + " Webspace", tint = palette.muted)
+                        }
+                    } else {
+                        Icon(Icons.Default.ArrowForward, null,
+                            tint = palette.muted, modifier = Modifier.size(18.dp))
+                    }
                 }
                 if (current.surface == Surface.WEB) {
-                    IconButton(onClick = {
-                        current.webspaceId = space.id
-                        current.pinnedWebspace = true
-                    }) {
-                        Icon(Icons.Default.ArrowForward,
-                            "Move current tab to " + space.name, tint = palette.accent)
-                    }
-                    TextButton(onClick = {
-                        webspaces.assign(current.url, space.id)
-                        current.webspaceId = space.id
-                        current.pinnedWebspace = false
-                    }) { Text("Route", fontSize = 11.sp) }
-                }
-                if (space.id.startsWith("custom-")) {
-                    IconButton(onClick = { pendingRemove = space }) {
-                        Icon(Icons.Default.Delete,
-                            "Remove " + space.name + " Webspace", tint = palette.muted)
+                    HorizontalDivider(
+                        color = palette.outline.copy(alpha = 0.28f),
+                        modifier = Modifier.padding(horizontal = 14.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                current.webspaceId = space.id
+                                current.pinnedWebspace = true
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        ) {
+                            Text("Move tab", color = palette.accent,
+                                fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(
+                            onClick = {
+                                webspaces.assign(current.url, space.id)
+                                current.webspaceId = space.id
+                                current.pinnedWebspace = false
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        ) {
+                            Text("Route site", color = palette.accent,
+                                fontSize = 13.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = name, onValueChange = { name = it.take(30) },
-                label = { Text("Custom Webspace") }, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { if (webspaces.create(name) != null) name = "" }) {
-                Text("Add")
-            }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 19.dp, vertical = 16.dp)) {
+            OutlinedTextField(
+                value = name, onValueChange = { name = it.take(30) },
+                label = { Text("Custom Webspace") },
+                singleLine = true,
+                isError = name.isNotBlank() && !canCreate,
+                supportingText = {
+                    Text(
+                        when {
+                            webspaces.custom.size >= 10 -> "Maximum 10 custom Webspaces."
+                            name.isNotBlank() && !canCreate ->
+                                "Use a unique name with 2–30 characters."
+                            else -> "Custom spaces organize tabs; they do not isolate accounts."
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = { if (webspaces.create(name) != null) name = "" },
+                enabled = canCreate,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.accent, contentColor = palette.accentOn
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("Add Webspace") }
         }
         if (current.surface == Surface.WEB &&
             VisitPolicy.host(current.url) in webspaces.assignments) {
