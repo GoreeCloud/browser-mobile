@@ -2,7 +2,7 @@
 
 ## Components
 
-- `MainActivity.kt`: native Compose toolbar, Home, New Tab, tabs, privacy settings, Android WebView host.
+- `MainActivity.kt`: native Compose toolbar, Home, New Tab, tabs, privacy settings, Android WebView host. The redesigned New Tab implements the user-provided mockup with a low-opacity native Canvas wave, fixed Startpage CTA, and actual Bookmarks / website-host History / Android Downloads / Privacy Center actions. The four shortcuts collapse to a two-column grid at narrower widths or enlarged text. [Mockup audit and constraints](NEW_TAB_MOCKUP_AUDIT.md).
 - `core/NavigationPolicy.kt`: HTTPS-first address resolution, upgraded HTTP navigation without downgrade fallback, non-GET rewrite rejection, search fallback, tracking parameter normalization and starter domain blocklist.
 - `core/BrowserPreferences.kt`: app-private preference, bookmark and site-exception persistence; WebView CookieManager toggles. The request-thread blocking switch and each tab's top-level page URL use volatile snapshots rather than reading Compose mutable state from WebView background callbacks.
 - `core/SiteExceptions.kt`: exact-host, HTTP(S)-only per-site filter exceptions with no automatic subdomain exemptions.
@@ -33,4 +33,4 @@
 
 ## GC UI
 
-Visual composition adopts the governing GoreeCloud UI principles: Canvas / Surface / Lens hierarchy, Iris semantic palette inspiration, 12/18/26/36 corner progression, 4dp spacing rhythm and 44dp+ touch actions. The three-dot overflow is an anchored pop-up, tabs show a count, and Home displays real website hosts with WebView favicons instead of permanent letter placeholders. The oversized Home hero and top privacy badge were removed. The existing launcher vector is reused in the header but has not been adopted as a centrally governed, product-specific official asset. Precise official native token parity and final rendered acceptance have **not** yet been verified.
+Visual composition adopts the governing GoreeCloud UI principles: Canvas / Surface / Lens hierarchy, Iris semantic palette inspiration, 12/18/26/36 corner progression, 4dp spacing rhythm and 44dp+ touch actions. The bottom browser navigation is a separate elevated, inset, safe-area dock with a neutral New Tab icon; overflow is a compact rounded action palette with grouped tasks. Home leads with dynamic sites and source-reported favicons; New Tab has a reduced editorial hero. Both omit the former top privacy badge and oversized Home banner. The native portal icon and themed monochrome variant were authored to match the centrally published GoreeCloud Browser Mobile vector identity ([source commit 0239de5](https://github.com/GoreeCloud/brand-assets/commit/0239de5e73683aec55454b1963b4f3dca593a14c)). Exact native SVG/XML pixel parity and full accessibility coverage are not yet independently certified.

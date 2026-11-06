@@ -2,6 +2,7 @@ package com.goreecloud.browsermobile
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -27,6 +28,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,6 +51,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -64,17 +68,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.goreecloud.browsermobile.core.BrowsingLibrary
@@ -96,7 +106,7 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private enum class Surface { NEW_TAB, HOME, WEB }
-private enum class Panel { TABS, PRIVACY, WEBSPACES }
+private enum class Panel { TABS, PRIVACY, WEBSPACES, BOOKMARKS, HISTORY, DOWNLOADS }
 private enum class DestinationMode { RECENT, FAVORITES, MOST }
 
 private class BrowserTab {
@@ -403,20 +413,11 @@ private fun BrowserApp(
                 modifier = Modifier.fillMaxWidth().padding(start = 21.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier.size(31.dp)
-                        .background(
-                            Brush.linearGradient(listOf(Color(0xFF9D8BFF), Color(0xFF62D9CE))),
-                            RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "GoreeCloud Browser Mobile app mark",
-                        modifier = Modifier.size(31.dp)
-                    )
-                }
+                Image(
+                    painter = painterResource(R.drawable.ic_browser_symbol),
+                    contentDescription = "GoreeCloud Browser Mobile",
+                    modifier = Modifier.size(40.dp)
+                )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text("GoreeCloud", color = palette.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -441,7 +442,11 @@ private fun BrowserApp(
                     value = address, onValueChange = { address = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Search privately or enter address", fontSize = 13.sp, color = palette.muted) },
+                    placeholder = {
+                        Text("Search or enter address", fontSize = 13.sp,
+                            color = palette.muted, maxLines = 1,
+                            softWrap = false, overflow = TextOverflow.Ellipsis)
+                    },
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = palette.text),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { openUrl(address) }),
@@ -465,11 +470,14 @@ private fun BrowserApp(
                 )
             } else Spacer(Modifier.height(2.dp))
 
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = 82.dp)) {
                 when (current.surface) {
                     Surface.NEW_TAB -> NewTabPage(
                         palette = palette, openUrl = ::openUrl,
-                        onHome = { current.surface = Surface.HOME }
+                        onBookmarks = { panel = Panel.BOOKMARKS },
+                        onHistory = { panel = Panel.HISTORY },
+                        onDownloads = { panel = Panel.DOWNLOADS },
+                        onSettings = { panel = Panel.PRIVACY }
                     )
                     Surface.HOME -> HomePage(
                         palette = palette, preferences = preferences,
@@ -523,36 +531,41 @@ private fun BrowserApp(
                     }
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 7.dp)
-                    .background(palette.surface, RoundedCornerShape(26.dp))
-                    .border(1.dp, palette.outline, RoundedCornerShape(26.dp))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                DockButton(Icons.Default.ArrowBack, "Back", palette, enabled =
-                    current.surface == Surface.WEB && current.webView?.canGoBack() == true) {
-                    current.webView?.goBack()
-                }
-                DockButton(Icons.Default.ArrowForward, "Forward", palette, enabled =
-                    current.surface == Surface.WEB && current.webView?.canGoForward() == true) {
-                    current.webView?.goForward()
-                }
-                DockButton(Icons.Default.Home, "Home", palette) { current.surface = Surface.HOME }
-                DockButton(Icons.Default.Add, "New tab", palette, accent = true) { openNewTab() }
-                TabCountDock(tabs.size, palette) { panel = Panel.TABS }
-                BrowserOverflowMenu(
-                    tab = current,
-                    preferences = preferences,
-                    palette = palette,
-                    activity = activity,
-                    onPrivacy = { panel = Panel.PRIVACY },
-                    onWebspaces = { panel = Panel.WEBSPACES },
-                    onHome = { current.surface = Surface.HOME }
-                )
+        }
+        Row(
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .shadow(14.dp, RoundedCornerShape(30.dp), clip = false)
+                .background(palette.surface.copy(alpha = 0.98f), RoundedCornerShape(30.dp))
+                .border(1.dp, palette.outline.copy(alpha = 0.9f), RoundedCornerShape(30.dp))
+                .padding(horizontal = 7.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DockButton(Icons.Default.ArrowBack, "Back", palette,
+                enabled = current.surface == Surface.WEB && current.webView?.canGoBack() == true) {
+                current.webView?.goBack()
             }
-            Spacer(Modifier.height(5.dp))
+            DockButton(Icons.Default.ArrowForward, "Forward", palette,
+                enabled = current.surface == Surface.WEB && current.webView?.canGoForward() == true) {
+                current.webView?.goForward()
+            }
+            DockButton(Icons.Default.Home, "Home", palette) {
+                current.surface = Surface.HOME
+            }
+            DockButton(Icons.Default.Add, "New tab", palette) {
+                openNewTab()
+            }
+            TabCountDock(tabs.size, palette) { panel = Panel.TABS }
+            BrowserOverflowMenu(
+                tab = current,
+                preferences = preferences,
+                palette = palette,
+                activity = activity,
+                onPrivacy = { panel = Panel.PRIVACY },
+                onWebspaces = { panel = Panel.WEBSPACES },
+                onHome = { current.surface = Surface.HOME }
+            )
         }
     }
 
@@ -597,7 +610,17 @@ private fun BrowserApp(
                     TextButton(onClick = { openNewTab() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
                     }
+                    Spacer(Modifier.height(32.dp))
                 }
+                Panel.BOOKMARKS -> BookmarksPanel(
+                    preferences = preferences, palette = palette,
+                    openUrl = { url -> panel = null; openUrl(url) }
+                )
+                Panel.HISTORY -> RecentSitesPanel(
+                    library = library, palette = palette,
+                    openUrl = { url -> panel = null; openUrl(url) }
+                )
+                Panel.DOWNLOADS -> DeviceDownloadsPanel(activity, palette)
                 Panel.PRIVACY -> PrivacyPanel(
                     activity, current, preferences, filterLists, palette, cleanedCount, library, icons
                 )
@@ -620,32 +643,14 @@ private fun BrowserApp(
 
 @Composable
 private fun DockButton(
-    icon: ImageVector,
-    label: String,
-    palette: GcPalette,
-    enabled: Boolean = true,
-    accent: Boolean = false,
-    action: () -> Unit
+    icon: ImageVector, label: String, palette: GcPalette,
+    enabled: Boolean = true, action: () -> Unit
 ) {
-    IconButton(
-        onClick = action,
-        enabled = enabled,
-        modifier = Modifier.size(47.dp).then(
-            if (accent) Modifier.background(
-                Brush.linearGradient(listOf(Color(0xFF8AA7FF), Color(0xFF7CE5D9))),
-                RoundedCornerShape(17.dp)
-            ) else Modifier
-        )
-    ) {
+    IconButton(onClick = action, enabled = enabled, modifier = Modifier.size(49.dp)) {
         Icon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.size(22.dp),
-            tint = when {
-                !enabled -> palette.muted.copy(alpha = 0.38f)
-                accent -> Color(0xFF0B1736)
-                else -> palette.text
-            }
+            imageVector = icon, contentDescription = label,
+            modifier = Modifier.size(23.dp),
+            tint = if (enabled) palette.text else palette.muted.copy(alpha = 0.4f)
         )
     }
 }
@@ -654,106 +659,302 @@ private fun DockButton(
 private fun NewTabPage(
     palette: GcPalette,
     openUrl: (String) -> Unit,
-    onHome: () -> Unit
+    onBookmarks: () -> Unit,
+    onHistory: () -> Unit,
+    onDownloads: () -> Unit,
+    onSettings: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 18.dp, vertical = 8.dp)
     ) {
-        Spacer(Modifier.height(28.dp))
-        Box(
-            modifier = Modifier.size(78.dp).background(
-                Brush.linearGradient(listOf(Color(0xFFA78AFF), Color(0xFF72E1DA))),
-                RoundedCornerShape(26.dp)
-            ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Add, null, tint = Color(0xFF101831), modifier = Modifier.size(38.dp))
+        Box(Modifier.fillMaxWidth().height(172.dp)) {
+            NewTabWaveAccent(palette)
+            Column(
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
+            ) {
+                Text("Where to next?", color = palette.text,
+                    fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text("A fresh space for your next discovery.",
+                    fontSize = 13.sp, lineHeight = 19.sp, color = palette.muted)
+            }
         }
-        Spacer(Modifier.height(25.dp))
-        Text(
-            "New beginnings.",
-            fontSize = 31.sp, lineHeight = 35.sp,
-            fontWeight = FontWeight.Bold, color = palette.text
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "An open canvas for your next curiosity.",
-            color = palette.muted, fontSize = 14.sp
-        )
-        Spacer(Modifier.height(33.dp))
+        Spacer(Modifier.height(4.dp))
         Surface(
+            modifier = Modifier.fillMaxWidth(),
             color = palette.surface,
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(23.dp),
             border = BorderStroke(1.dp, palette.outline),
-            modifier = Modifier.fillMaxWidth()
+            shadowElevation = 3.dp
         ) {
-            Column(Modifier.padding(22.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, null, tint = palette.accent)
-                    Spacer(Modifier.width(10.dp))
-                    Text("Search the open web", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = palette.text)
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(43.dp)
+                        .background(palette.surfaceAlt, RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Language, contentDescription = null,
+                        tint = palette.accent, modifier = Modifier.size(25.dp))
                 }
-                Spacer(Modifier.height(9.dp))
-                Text(
-                    "Startpage protects your searches while GoreeCloud Search is being stabilized.",
-                    color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp
-                )
-                Spacer(Modifier.height(17.dp))
+                Spacer(Modifier.width(11.dp))
+                Box(Modifier.width(1.dp).height(35.dp).background(palette.outline))
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Explore the web", color = palette.text,
+                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(2.dp))
+                    Text("Powered by Startpage", fontSize = 11.sp,
+                        color = palette.muted, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { openUrl(SearchPolicy.HOME_URL) },
+                    shape = RoundedCornerShape(15.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(43.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent, contentColor = palette.accentOn
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                        containerColor = palette.accent, contentColor = palette.accentOn)
                 ) {
-                    Text("Open Startpage", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(17.dp))
+                    Text("Open", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.ArrowForward, contentDescription = null,
+                        modifier = Modifier.size(16.dp))
                 }
             }
         }
-        Spacer(Modifier.height(29.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("A LITTLE INSPIRATION", color = palette.muted,
-                fontSize = 11.sp, letterSpacing = 1.7.sp)
-        }
+        Spacer(Modifier.height(28.dp))
+        Text("QUICK ACCESS", color = palette.muted, fontSize = 11.sp,
+            letterSpacing = 1.7.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(13.dp))
-        SuggestionRow("Discover something new", "the history of the internet", palette, openUrl)
-        SuggestionRow("Explore the universe", "latest space discoveries", palette, openUrl)
-        SuggestionRow("Learn one new thing", "science breakthroughs", palette, openUrl)
-        Spacer(Modifier.height(24.dp))
-        TextButton(onClick = onHome) {
-            Icon(Icons.Default.Home, null, tint = palette.accent, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Visit your Home", color = palette.accent)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val columns = if (maxWidth < 340.dp || LocalDensity.current.fontScale >= 1.2f) 2 else 4
+            val tiles = listOf(
+                Triple("Bookmarks", Icons.Default.Bookmark, onBookmarks),
+                Triple("History", Icons.Default.History, onHistory),
+                Triple("Downloads", Icons.Default.Download, onDownloads),
+                Triple("Settings", Icons.Default.Settings, onSettings)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                tiles.chunked(columns).forEach { segment ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(9.dp)
+                    ) {
+                        segment.forEach { (label, icon, action) ->
+                            QuickAccessTile(label, icon, palette,
+                                Modifier.weight(1f), action)
+                        }
+                        repeat(columns - segment.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(30.dp))
+    }
+}
+
+@Composable
+private fun NewTabWaveAccent(palette: GcPalette) {
+    val dark = palette.canvas == DarkGc.canvas
+    Canvas(Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val back = Path().apply {
+            moveTo(w * 0.65f, h * 0.70f)
+            cubicTo(w * 0.72f, h * 0.63f, w * 0.72f, h * 0.17f, w, h * 0.18f)
+            lineTo(w, h * 0.82f)
+            cubicTo(w * 0.83f, h * 0.48f, w * 0.73f, h * 1.04f, w * 0.65f, h * 0.70f)
+            close()
+        }
+        drawPath(
+            path = back,
+            brush = Brush.horizontalGradient(
+                listOf(Color.Transparent,
+                    Color(0xFF45A8FF).copy(alpha = if (dark) 0.13f else 0.15f))),
+        )
+        val front = Path().apply {
+            moveTo(w * 0.73f, h * 0.78f)
+            cubicTo(w * 0.76f, h * 0.45f, w * 0.89f, h * 0.43f, w, h * 0.48f)
+            lineTo(w, h * 0.89f)
+            cubicTo(w * 0.85f, h * 0.68f, w * 0.77f, h * 1.01f, w * 0.73f, h * 0.78f)
+            close()
+        }
+        drawPath(
+            path = front,
+            brush = Brush.horizontalGradient(
+                listOf(Color.Transparent,
+                    Color(0xFF30C9E4).copy(alpha = if (dark) 0.14f else 0.17f)))
+        )
+    }
+}
+
+@Composable
+private fun QuickAccessTile(
+    title: String,
+    icon: ImageVector,
+    palette: GcPalette,
+    modifier: Modifier = Modifier,
+    action: () -> Unit
+) {
+    Surface(
+        onClick = action,
+        modifier = modifier.heightIn(min = 92.dp),
+        color = palette.surface,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, palette.outline),
+        shadowElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 15.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null,
+                tint = palette.text, modifier = Modifier.size(27.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(title, color = palette.text, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Medium)
         }
     }
 }
 
 @Composable
-private fun SuggestionRow(
-    title: String,
-    query: String,
+private fun BookmarksPanel(
+    preferences: BrowserPreferences,
     palette: GcPalette,
     openUrl: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
-            .background(palette.surfaceAlt.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-            .clickable { openUrl(query) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Default.Search, null, tint = palette.accent, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(title, color = palette.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        Icon(Icons.Default.ArrowForward, null, tint = palette.muted, modifier = Modifier.size(18.dp))
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        SheetHeading("Bookmarks", "Your saved websites · stored only on this device", palette)
+        if (preferences.savedSites.isEmpty()) {
+            Text("Save a website from the three-dot menu to find it here.",
+                color = palette.muted, fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 23.dp, vertical = 24.dp))
+        } else {
+            preferences.savedSites.forEach { url ->
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(palette.surfaceAlt),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Bookmark, null, tint = palette.accent,
+                        modifier = Modifier.padding(start = 12.dp).size(21.dp))
+                    Column(
+                        modifier = Modifier.weight(1f).clickable { openUrl(url) }
+                            .padding(horizontal = 13.dp, vertical = 14.dp)
+                    ) {
+                        Text(VisitPolicy.host(url) ?: "Website", color = palette.text,
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text(url, color = palette.muted, fontSize = 11.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    IconButton(onClick = { preferences.toggleBookmark(url) }) {
+                        Icon(Icons.Default.Close, "Remove bookmark", tint = palette.muted)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(25.dp))
     }
 }
+
+@Composable
+private fun RecentSitesPanel(
+    library: BrowsingLibrary,
+    palette: GcPalette,
+    openUrl: (String) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        SheetHeading("Recently visited websites", "Host-only local history · no page URLs", palette)
+        when {
+            !library.historyEnabled -> Text(
+                "Website history is disabled in Privacy settings.",
+                color = palette.muted, fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 19.dp))
+            library.sites.isEmpty() -> Text(
+                "Recently visited websites will appear here.",
+                color = palette.muted, fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 19.dp))
+            else -> {
+                library.sites.sortedByDescending { it.lastVisitedMs }.forEach { site ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(palette.surfaceAlt)
+                            .clickable { openUrl(site.url) }
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Language, null, tint = palette.accent,
+                            modifier = Modifier.size(23.dp))
+                        Spacer(Modifier.width(13.dp))
+                        Text(site.host, color = palette.text, fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f))
+                        Text(if (site.visits == 1) "1 visit"
+                             else site.visits.toString() + " visits",
+                            color = palette.muted, fontSize = 11.sp)
+                    }
+                }
+                TextButton(
+                    onClick = library::clear,
+                    modifier = Modifier.padding(start = 18.dp, top = 6.dp)
+                ) {
+                    Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Clear website history")
+                }
+            }
+        }
+        Spacer(Modifier.height(25.dp))
+    }
+}
+
+@Composable
+private fun DeviceDownloadsPanel(activity: Activity, palette: GcPalette) {
+    var error by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 25.dp)) {
+        SheetHeading("Downloads", "View files in Android's download manager", palette)
+        Text(
+            "Browser Mobile does not yet manage its own downloaded files. " +
+                "Use Android Downloads to see files saved by your device.",
+            color = palette.muted, fontSize = 13.sp, lineHeight = 19.sp,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp)
+        )
+        Button(
+            onClick = {
+                try {
+                    activity.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+                    error = null
+                } catch (_: Exception) {
+                    error = "Android Downloads is unavailable on this device."
+                }
+            },
+            modifier = Modifier.padding(horizontal = 22.dp)
+        ) {
+            Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Open device downloads")
+        }
+        error?.let {
+            Text(it, color = palette.muted, fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp))
+        }
+    }
+}
+
 
 @Composable
 private fun HomePage(
@@ -775,9 +976,11 @@ private fun HomePage(
             LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d"))
         }
         Text(today.uppercase(), color = palette.muted, letterSpacing = 1.8.sp, fontSize = 10.sp)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
+        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
+        Spacer(Modifier.height(21.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Privacy at a glance", fontSize = 20.sp, fontWeight = FontWeight.Bold,
+            Text("Privacy at a glance", fontSize = 18.sp, fontWeight = FontWeight.Bold,
                 color = palette.text, modifier = Modifier.weight(1f))
             TextButton(onClick = onPrivacy) { Text("Manage", color = palette.accent) }
         }
@@ -792,13 +995,11 @@ private fun HomePage(
             PrivacyStat(
                 modifier = Modifier.weight(1f),
                 count = cleaned.toString(),
-                name = "Trackers removed",
+                name = "URL fields cleaned",
                 icon = Icons.Default.Lock,
                 palette = palette
             )
         }
-        Spacer(Modifier.height(27.dp))
-        QuickDestinations(library, preferences, icons, faviconRevision, palette, openUrl)
         Spacer(Modifier.height(25.dp))
     }
 }
@@ -814,11 +1015,11 @@ private fun PrivacyStat(
     Column(
         modifier = modifier.background(palette.surface, RoundedCornerShape(22.dp))
             .border(1.dp, palette.outline, RoundedCornerShape(22.dp))
-            .padding(17.dp)
+            .padding(15.dp)
     ) {
-        Icon(icon, null, tint = palette.success, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(13.dp))
-        Text(count, color = palette.text, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+        Icon(icon, null, tint = palette.success, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(9.dp))
+        Text(count, color = palette.text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(name, color = palette.muted, fontSize = 11.sp)
     }
 }
@@ -1049,15 +1250,30 @@ private fun QuickDestinations(
             compareByDescending<VisitedSite> { it.visits }.thenByDescending { it.lastVisitedMs }
         ).take(8)
     }
-    Text("Quick destinations", fontSize = 20.sp,
-        fontWeight = FontWeight.Bold, color = palette.text)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Quick destinations", fontSize = 21.sp,
+            fontWeight = FontWeight.Bold, color = palette.text,
+            modifier = Modifier.weight(1f))
+        Text("ON THIS DEVICE", color = palette.muted,
+            fontSize = 9.sp, letterSpacing = 1.1.sp)
+    }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         listOf(DestinationMode.RECENT to "Recent",
             DestinationMode.FAVORITES to "Favorites",
             DestinationMode.MOST to "Most visited").forEach { (option, label) ->
-            FilterChip(selected = mode == option, onClick = { mode = option },
-                label = { Text(label, fontSize = 11.sp) })
+            FilterChip(
+                selected = mode == option, onClick = { mode = option },
+                label = { Text(label, fontSize = 11.sp) },
+                shape = RoundedCornerShape(13.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = palette.surface,
+                    labelColor = palette.muted,
+                    selectedContainerColor = palette.surfaceAlt,
+                    selectedLabelColor = palette.accent
+                ),
+                border = BorderStroke(1.dp, palette.outline)
+            )
         }
     }
     Spacer(Modifier.height(9.dp))
@@ -1198,58 +1414,120 @@ private fun BrowserOverflowMenu(
     onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val canAct = tab.surface == Surface.WEB
     Box {
-        DockButton(Icons.Default.MoreVert, "Menu", palette) { expanded = true }
+        DockButton(Icons.Default.MoreVert, "More options", palette) { expanded = true }
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(palette.surface)
+            modifier = Modifier.width(262.dp),
+            offset = DpOffset((-7).dp, (-7).dp),
+            shape = RoundedCornerShape(22.dp),
+            containerColor = palette.surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 18.dp,
+            border = BorderStroke(1.dp, palette.outline)
         ) {
-            DropdownMenuItem(
-                text = { Text("Webspaces") },
-                leadingIcon = { Icon(Icons.Default.Language, null) },
-                onClick = { expanded = false; onWebspaces() }
-            )
-            DropdownMenuItem(
-                text = { Text("Reload page") },
-                leadingIcon = { Icon(Icons.Default.Refresh, null) },
-                enabled = tab.surface == Surface.WEB,
-                onClick = { expanded = false; tab.webView?.reload() }
-            )
-            DropdownMenuItem(
-                text = { Text(if (tab.url in preferences.savedSites)
-                    "Remove bookmark" else "Bookmark page") },
-                leadingIcon = { Icon(Icons.Default.Bookmark, null) },
-                enabled = tab.surface == Surface.WEB,
-                onClick = { expanded = false; preferences.toggleBookmark(tab.url) }
-            )
-            DropdownMenuItem(
-                text = { Text("Share page") },
-                leadingIcon = { Icon(Icons.Default.Share, null) },
-                enabled = tab.surface == Surface.WEB,
-                onClick = {
-                    expanded = false
-                    if (NavigationPolicy.isHttpUrl(tab.url)) {
-                        activity.startActivity(Intent.createChooser(
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, tab.url)
-                            }, "Share link"
-                        ))
+            Column(Modifier.padding(horizontal = 9.dp, vertical = 7.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("QUICK ACTIONS", color = palette.muted,
+                        fontSize = 10.sp, letterSpacing = 1.7.sp,
+                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.Tune, contentDescription = null,
+                        tint = palette.muted, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.height(3.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MenuActionTile(Icons.Default.Refresh, "Reload", canAct, palette,
+                        modifier = Modifier.weight(1f)) {
+                        expanded = false
+                        tab.webView?.reload()
+                    }
+                    MenuActionTile(Icons.Default.Bookmark,
+                        if (tab.url in preferences.savedSites) "Unsave" else "Save",
+                        canAct, palette, modifier = Modifier.weight(1f)) {
+                        expanded = false
+                        preferences.toggleBookmark(tab.url)
+                    }
+                    MenuActionTile(Icons.Default.Share, "Share", canAct, palette,
+                        modifier = Modifier.weight(1f)) {
+                        expanded = false
+                        if (NavigationPolicy.isHttpUrl(tab.url)) {
+                            activity.startActivity(Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, tab.url)
+                                }, "Share link"
+                            ))
+                        }
                     }
                 }
-            )
-            HorizontalDivider(color = palette.outline)
-            DropdownMenuItem(
-                text = { Text("Privacy & DNS manager") },
-                leadingIcon = { Icon(Icons.Default.Shield, null) },
-                onClick = { expanded = false; onPrivacy() }
-            )
-            DropdownMenuItem(
-                text = { Text("Home") },
-                leadingIcon = { Icon(Icons.Default.Home, null) },
-                onClick = { expanded = false; onHome() }
-            )
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = palette.outline.copy(alpha = 0.6f))
+                Spacer(Modifier.height(5.dp))
+                MenuNavigationItem(Icons.Default.Language, "Webspaces", palette) {
+                    expanded = false
+                    onWebspaces()
+                }
+                MenuNavigationItem(Icons.Default.Shield, "Privacy & DNS", palette) {
+                    expanded = false
+                    onPrivacy()
+                }
+                MenuNavigationItem(Icons.Default.Home, "Go Home", palette) {
+                    expanded = false
+                    onHome()
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun MenuActionTile(
+    icon: ImageVector, title: String, enabled: Boolean, palette: GcPalette,
+    modifier: Modifier = Modifier, action: () -> Unit
+) {
+    Column(
+        modifier = modifier.clip(RoundedCornerShape(16.dp))
+            .background(palette.surfaceAlt.copy(alpha = 0.85f))
+            .clickable(enabled = enabled, onClick = action)
+            .padding(vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null,
+            tint = if (enabled) palette.accent else palette.muted.copy(alpha = 0.4f),
+            modifier = Modifier.size(21.dp))
+        Spacer(Modifier.height(5.dp))
+        Text(title, fontSize = 10.sp, fontWeight = FontWeight.Medium,
+            color = if (enabled) palette.text else palette.muted.copy(alpha = 0.55f))
+    }
+}
+
+@Composable
+private fun MenuNavigationItem(
+    icon: ImageVector, title: String, palette: GcPalette, action: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp))
+            .clickable(onClick = action)
+            .padding(horizontal = 7.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(33.dp).background(
+                palette.surfaceAlt, RoundedCornerShape(11.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = palette.accent,
+                modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(11.dp))
+        Text(title, color = palette.text, fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Icon(Icons.Default.ArrowForward, contentDescription = null,
+            tint = palette.muted, modifier = Modifier.size(14.dp))
     }
 }

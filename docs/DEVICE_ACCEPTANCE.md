@@ -50,4 +50,8 @@ The same authorized OnePlus N200 / Android 16 handset received an **in-place upg
 - The Webspaces organizer renders built-in spaces and visibly warns that WebView cookies and signed-in accounts are **not isolated**. It shows tab counts and supports local custom-space configuration, exact-host routing and manual tab moves in source.
 - One-device screenshots are visual smoke evidence, not a comprehensive accessibility, privacy, site routing or Android-version matrix.
 
-No new images were generated for the redesign. **Product-specific official Browser Mobile logo/icon/artwork is still missing from the central brand-assets catalog**; the existing Android launcher vector was reused only. The retained debug app is not a production-ready release.
+No image-generation tool was used for that redesign. At the time of this earlier test, the product-specific official Browser Mobile identity was absent from the central brand-assets catalog, and the previous Android launcher vector was used. A separate **later November 6 UI pass** authored, centrally published, and installed a replacement portal icon; see the next section. Neither test establishes production-release readiness.
+
+## November 6 founder New Tab mockup acceptance
+
+See [source-grounded New Tab mockup audit](NEW_TAB_MOCKUP_AUDIT.md) and [UI acceptance notes](UI_ACCEPTANCE.md). The same OnePlus N200 was used for an in-place debug APK update to test the native wave, Startpage card, four Quick Access controls, dark and light mode, landscape, 130%/100% text size, and preserved neutral floating navigation. The OS Downloads activity launched from the Downloads shortcut, and the Startpage web destination loaded. The local v2-signed debug APK passed 26 JVM tests, Lint and assembly. Device settings were restored after testing. No screenshots were committed and no image-generation service was used.
