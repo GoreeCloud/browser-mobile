@@ -473,7 +473,7 @@ private fun BrowserApp(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    if (current.surface == Surface.WEB) Icons.Default.Lock else Icons.Default.Search,
+                    if (current.surface == Surface.WEB) Icons.Default.Language else Icons.Default.Search,
                     contentDescription = null,
                     tint = palette.accent,
                     modifier = Modifier.padding(start = 15.dp).size(18.dp)
@@ -731,8 +731,7 @@ private fun DockButton(
         enabled = enabled,
         modifier = Modifier.size(47.dp).then(
             if (accent) Modifier.background(
-                Brush.linearGradient(listOf(Color(0xFF8AA7FF), Color(0xFF7CE5D9))),
-                RoundedCornerShape(17.dp)
+                palette.accent, RoundedCornerShape(17.dp)
             ) else Modifier
         )
     ) {
@@ -742,7 +741,7 @@ private fun DockButton(
             modifier = Modifier.size(22.dp),
             tint = when {
                 !enabled -> palette.muted.copy(alpha = 0.38f)
-                accent -> Color(0xFF0B1736)
+                accent -> palette.accentOn
                 else -> palette.text
             }
         )
@@ -1033,6 +1032,7 @@ private fun PrivacyPanel(
     var confirmHistoryClear by remember { mutableStateOf(false) }
     var confirmHistoryDisable by remember { mutableStateOf(false) }
     var confirmCookiesClear by remember { mutableStateOf(false) }
+    var showFilterSubscriptions by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
         Row(
@@ -1102,31 +1102,44 @@ private fun PrivacyPanel(
                 "Saved rules stay on-device and filter WebView subresources only.",
             palette
         )
-        FilterSource.entries.forEach { source ->
-            val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
-            val readiness = when {
-                !state.enabled -> "Off"
-                state.updating && !state.hasCache -> "Downloading…"
-                state.updateFailed && state.hasCache -> "Using saved list · update failed"
-                state.updateFailed -> "Unavailable · retry download"
-                state.hasCache -> state.domains.toString() + " domains loaded"
-                else -> "Waiting for first download"
-            }
-            PrivacyToggle(
-                source.title,
-                source.summary + " · " + readiness,
-                state.enabled, palette,
-                { enabled -> filterLists.setEnabled(source, enabled) }
-            )
-        }
         Text(
             filterLists.activeRuleCount.toString() + " active domains · " +
-                preferences.siteExceptionHosts.size + " site exceptions. Some ads cannot be blocked.",
-            modifier = Modifier.padding(horizontal = 23.dp, vertical = 8.dp),
-            color = palette.muted, fontSize = 12.sp
+                preferences.siteExceptionHosts.size + " site exceptions. " +
+                "Some ads cannot be blocked.",
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
+            color = palette.muted, fontSize = 12.sp, lineHeight = 18.sp
         )
-        SheetAction(Icons.Default.Refresh, "Update enabled lists now", palette) {
-            filterLists.refresh(force = true)
+        TextButton(
+            onClick = { showFilterSubscriptions = !showFilterSubscriptions },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                .heightIn(min = 48.dp)
+        ) {
+            Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (showFilterSubscriptions) "Hide filter lists"
+                else "Manage filter lists")
+        }
+        if (showFilterSubscriptions) {
+            FilterSource.entries.forEach { source ->
+                val state = filterLists.states[source] ?: FilterListStatus(source.enabledByDefault)
+                val readiness = when {
+                    !state.enabled -> "Off"
+                    state.updating && !state.hasCache -> "Downloading…"
+                    state.updateFailed && state.hasCache -> "Using saved list · update failed"
+                    state.updateFailed -> "Unavailable · retry download"
+                    state.hasCache -> state.domains.toString() + " domains loaded"
+                    else -> "Waiting for first download"
+                }
+                PrivacyToggle(
+                    source.title,
+                    source.summary + " · " + readiness,
+                    state.enabled, palette,
+                    { enabled -> filterLists.setEnabled(source, enabled) }
+                )
+            }
+            SheetAction(Icons.Default.Refresh, "Update enabled lists now", palette) {
+                filterLists.refresh(force = true)
+            }
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         PrivacySectionHeading(
