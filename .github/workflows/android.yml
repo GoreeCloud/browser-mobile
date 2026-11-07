@@ -27,7 +27,7 @@ jobs:
       - name: Verify approved Prism Tabs v5 asset provenance
         run: python3 scripts/check_brand_assets.py
       - name: Test & assemble debug variant
-        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
+        run: gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --no-daemon --stacktrace
       - name: Retain debug APK for verified testing
         uses: actions/upload-artifact@v4
         with:
