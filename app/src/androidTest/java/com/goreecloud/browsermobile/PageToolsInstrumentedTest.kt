@@ -13,6 +13,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import com.goreecloud.browsermobile.core.PageActionPolicy
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -113,6 +115,60 @@ class PageToolsInstrumentedTest {
             awaitAbsent("Close find in page"))
         assertTrue("Address bar should remain available after closing search",
             awaitNode("Go to address") != null)
+    }
+
+    @Test
+    fun desktopSiteUsesWebViewChromeVersionAndRestoresMobileDefaults() {
+        val view = website ?: throw AssertionError("No QA WebView")
+        var originalUserAgent = ""
+        var originalWide = false
+        var originalOverview = false
+        instrumentation.runOnMainSync {
+            originalUserAgent = view.settings.userAgentString
+            originalWide = view.settings.useWideViewPort
+            originalOverview = view.settings.loadWithOverviewMode
+        }
+        val expectedDesktop = PageActionPolicy.desktopUserAgent(originalUserAgent)
+        assertNotNull("QA WebView should advertise a Chrome version", expectedDesktop)
+
+        clickLabel("More options")
+        clickLabel("Desktop site")
+        assertTrue("Desktop request did not set WebView user agent",
+            awaitUserAgent(view, expectedDesktop!!))
+        instrumentation.runOnMainSync {
+            assertTrue("Desktop request must enable wide viewport", view.settings.useWideViewPort)
+            assertTrue("Desktop request must enable overview mode", view.settings.loadWithOverviewMode)
+        }
+        clickLabel("More options")
+        assertTrue("Menu must expose the reversible mobile-site action",
+            awaitNode("Mobile site") != null)
+        clickLabel("Mobile site")
+        assertTrue("Restoring mobile must restore the actual OEM user agent",
+            awaitUserAgent(view, originalUserAgent))
+        instrumentation.runOnMainSync {
+            assertEquals("Must restore original OEM viewport", originalWide, view.settings.useWideViewPort)
+            assertEquals("Must restore original overview mode", originalOverview, view.settings.loadWithOverviewMode)
+        }
+    }
+
+    @Test
+    fun cleanLinkActionIsAccessibleWithoutReadingOrOverwritingPersonalClipboard() {
+        clickLabel("More options")
+        assertTrue("Webpage menu must offer an explicit copy action",
+            awaitNode("Copy clean link") != null)
+        // No click: this smoke verifies the affordance, not the user's personal
+        // OS clipboard. Deterministic clean-link behavior is JVM-tested.
+    }
+
+    private fun awaitUserAgent(view: WebView, expected: String): Boolean {
+        val deadline = SystemClock.uptimeMillis() + 6_000L
+        do {
+            var value = ""
+            instrumentation.runOnMainSync { value = view.settings.userAgentString }
+            if (value == expected) return true
+            Thread.sleep(100L)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return false
     }
 
     private fun readTextZoom(view: WebView): Int {
