@@ -30,6 +30,9 @@ class ChromeGestureInstrumentedTest {
     @Before
     fun launchBrowser() {
         val target = instrumentation.targetContext
+        require(target.packageName.endsWith(".qa")) {
+            "Device smoke tests require an isolated .qa application ID, not the normal browser"
+        }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.goreecloud.com/")).apply {
             setClass(target, MainActivity::class.java)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
