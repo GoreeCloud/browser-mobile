@@ -64,6 +64,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -79,6 +81,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -92,6 +96,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -106,6 +111,7 @@ import com.goreecloud.browsermobile.core.WebspacesManager
 import com.goreecloud.browsermobile.core.BrowserPreferences
 import com.goreecloud.browsermobile.core.NavigationPolicy
 import com.goreecloud.browsermobile.core.BrowserChromeScrollPolicy
+import com.goreecloud.browsermobile.core.PageToolsPolicy
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
@@ -125,7 +131,7 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 private enum class Surface { NEW_TAB, HOME, WEB }
-private enum class Panel { TABS, PRIVACY, WEBSPACES, BOOKMARKS, HISTORY, DOWNLOADS }
+private enum class Panel { TABS, PRIVACY, WEBSPACES, BOOKMARKS, HISTORY, DOWNLOADS, TEXT_SIZE }
 private enum class DestinationMode { RECENT, FAVORITES, MOST }
 
 private class BrowserTab {
@@ -142,6 +148,13 @@ private class BrowserTab {
     var progress by mutableIntStateOf(0)
     var blocked by mutableIntStateOf(0)
     var error by mutableStateOf<String?>(null)
+    // Transient per-tab page tools: no persistent queries or per-site overrides.
+    var findOpen by mutableStateOf(false)
+    var findQuery by mutableStateOf("")
+    var findMatchCount by mutableIntStateOf(0)
+    var findMatchOrdinal by mutableIntStateOf(0)
+    var findPending by mutableStateOf(false)
+    var textZoom by mutableIntStateOf(PageToolsPolicy.DEFAULT_TEXT_ZOOM)
     var webView: WebView? = null
 }
 
@@ -239,11 +252,20 @@ private fun configureWebView(
         mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         mediaPlaybackRequiresUserGesture = true
         safeBrowsingEnabled = true
+        textZoom = tab.textZoom
         setGeolocationEnabled(false)
     }
     webView.isSaveEnabled = true
     CookieManager.getInstance().setAcceptThirdPartyCookies(webView, preferences.thirdPartyCookies)
     val mainHandler = Handler(Looper.getMainLooper())
+    webView.setFindListener { activeOrdinal, matchCount, isDone ->
+        // Search results only describe the current volatile page, never a history record.
+        if (tab.findOpen) {
+            tab.findMatchOrdinal = activeOrdinal.coerceAtLeast(0)
+            tab.findMatchCount = matchCount.coerceAtLeast(0)
+            tab.findPending = !isDone
+        }
+    }
 
     webView.webViewClient = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -272,6 +294,12 @@ private fun configureWebView(
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            tab.findOpen = false
+            tab.findQuery = ""
+            tab.findMatchCount = 0
+            tab.findMatchOrdinal = 0
+            tab.findPending = false
+            view.clearMatches()
             onPageNavigation()
             tab.thumbnail = null
             tab.loading = true
@@ -363,11 +391,21 @@ private fun BrowserApp(
     }
     var chromeVisible by remember { mutableStateOf(true) }
     var addressFocused by remember { mutableStateOf(false) }
-    val showChrome = current.surface != Surface.WEB || chromeVisible || addressFocused
+    val showChrome = current.surface != Surface.WEB || chromeVisible || addressFocused || current.findOpen
 
     fun revealChrome() {
         chromeVisible = true
         scrollPolicy.reset()
+    }
+
+    fun closeFind(tab: BrowserTab) {
+        tab.findOpen = false
+        tab.findQuery = ""
+        tab.findMatchCount = 0
+        tab.findMatchOrdinal = 0
+        tab.findPending = false
+        tab.webView?.clearMatches()
+        focus.clearFocus()
     }
 
     fun captureCurrentPreview() {
@@ -446,6 +484,7 @@ private fun BrowserApp(
         address = if (current.surface == Surface.WEB) current.url else ""
     }
     LaunchedEffect(current.id, current.surface) {
+        if (current.surface != Surface.WEB && current.findOpen) closeFind(current)
         revealChrome()
     }
     LaunchedEffect(incomingUrl) {
@@ -458,6 +497,10 @@ private fun BrowserApp(
     BackHandler(enabled = panel != null || current.surface == Surface.WEB) {
         when {
             panel != null -> panel = null
+            current.findOpen -> {
+                closeFind(current)
+                revealChrome()
+            }
             current.surface == Surface.WEB && current.webView?.canGoBack() == true -> {
                 revealChrome()
                 current.webView?.goBack()
@@ -492,6 +535,12 @@ private fun BrowserApp(
                         addressFocused = focused
                         if (focused) revealChrome()
                     }
+                )
+            }
+            if (current.surface == Surface.WEB && current.findOpen) {
+                BrowserFindBar(
+                    tab = current, palette = palette,
+                    onClose = { closeFind(current); revealChrome() }
                 )
             }
             if (showChrome && current.surface == Surface.WEB && current.loading) {
@@ -555,6 +604,9 @@ private fun BrowserApp(
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(
                                         view, preferences.thirdPartyCookies
                                     )
+                                    if (view.settings.textZoom != current.textZoom) {
+                                        view.settings.textZoom = current.textZoom
+                                    }
                                     // Observe WebView pointer motion without consuming it.
                                     // ScrollY reacts to changes in WebView viewport height,
                                     // which previously caused the chrome to flicker.
@@ -650,6 +702,8 @@ private fun BrowserApp(
                 activity = activity,
                 onPrivacy = { panel = Panel.PRIVACY },
                 onWebspaces = { panel = Panel.WEBSPACES },
+                onFind = { current.findOpen = true; revealChrome() },
+                onTextSize = { revealChrome(); panel = Panel.TEXT_SIZE },
                 onHome = {
                     captureCurrentPreview()
                     current.surface = Surface.HOME
@@ -717,6 +771,7 @@ private fun BrowserApp(
                     openUrl = { url -> panel = null; openUrl(url) }
                 )
                 Panel.DOWNLOADS -> DeviceDownloadsPanel(activity, palette)
+                Panel.TEXT_SIZE -> TextSizePanel(current, palette)
                 Panel.PRIVACY -> PrivacyPanel(
                     activity, current, preferences, filterLists, palette, cleanedCount, library, icons
                 )
@@ -1762,7 +1817,8 @@ private fun WebspacesPanel(
 private fun BrowserOverflowMenu(
     tab: BrowserTab, preferences: BrowserPreferences,
     palette: GcPalette, activity: Activity,
-    onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit
+    onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit,
+    onFind: () -> Unit, onTextSize: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val canAct = tab.surface == Surface.WEB
@@ -1819,6 +1875,16 @@ private fun BrowserOverflowMenu(
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(color = palette.outline.copy(alpha = 0.6f))
                 Spacer(Modifier.height(5.dp))
+                if (canAct) {
+                    MenuNavigationItem(Icons.Default.Search, "Find in page", palette) {
+                        expanded = false
+                        onFind()
+                    }
+                    MenuNavigationItem(Icons.Default.FormatSize, "Text size", palette) {
+                        expanded = false
+                        onTextSize()
+                    }
+                }
                 MenuNavigationItem(Icons.Default.Language, "Webspaces", palette) {
                     expanded = false
                     onWebspaces()
@@ -1833,6 +1899,132 @@ private fun BrowserOverflowMenu(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BrowserFindBar(
+    tab: BrowserTab, palette: GcPalette, onClose: () -> Unit
+) {
+    val requester = remember(tab.id) { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(tab.id) {
+        requester.requestFocus()
+        keyboard?.show()
+    }
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(horizontal = 13.dp, vertical = 5.dp)
+            .shadow(10.dp, RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(palette.surface)
+            .border(1.dp, palette.outline, RoundedCornerShape(22.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = tab.findQuery,
+                onValueChange = { input ->
+                    val query = PageToolsPolicy.limitFindQuery(input)
+                    tab.findQuery = query
+                    tab.findMatchCount = 0
+                    tab.findMatchOrdinal = 0
+                    tab.findPending = query.isNotBlank()
+                    if (query.isBlank()) {
+                        tab.webView?.clearMatches()
+                        tab.findPending = false
+                    } else tab.webView?.findAllAsync(query)
+                },
+                modifier = Modifier.weight(1f).focusRequester(requester),
+                singleLine = true,
+                label = { Text("Find in page") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { if (tab.findMatchCount > 0) tab.webView?.findNext(true) }
+                )
+            )
+            IconButton(onClick = { keyboard?.hide(); onClose() }) {
+                Icon(Icons.Default.Close, contentDescription = "Close find in page",
+                    tint = palette.text)
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val status = when {
+                tab.findQuery.isBlank() -> "Type to find text on this page"
+                tab.findPending -> "Searching page…"
+                tab.findMatchCount == 0 -> "No matches"
+                else -> "${tab.findMatchOrdinal + 1} of ${tab.findMatchCount} matches"
+            }
+            Text(status, modifier = Modifier.weight(1f),
+                color = palette.muted, fontSize = 12.sp)
+            IconButton(
+                onClick = { tab.webView?.findNext(false) },
+                enabled = tab.findMatchCount > 0
+            ) {
+                Icon(Icons.Default.ArrowBack,
+                    contentDescription = "Previous match",
+                    tint = if (tab.findMatchCount > 0) palette.accent else palette.muted)
+            }
+            IconButton(
+                onClick = { tab.webView?.findNext(true) },
+                enabled = tab.findMatchCount > 0
+            ) {
+                Icon(Icons.Default.ArrowForward,
+                    contentDescription = "Next match",
+                    tint = if (tab.findMatchCount > 0) palette.accent else palette.muted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TextSizePanel(tab: BrowserTab, palette: GcPalette) {
+    fun setZoom(zoom: Int) {
+        tab.textZoom = zoom
+        tab.webView?.settings?.textZoom = zoom
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SheetHeading("Text size", "Make webpage text easier to read on this tab.", palette)
+        Text("This setting stays in this tab only and is not saved. Some websites may override text scaling.",
+            color = palette.muted, fontSize = 13.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            OutlinedButton(
+                onClick = { setZoom(PageToolsPolicy.stepTextZoom(tab.textZoom, -1)) },
+                enabled = tab.textZoom > PageToolsPolicy.MIN_TEXT_ZOOM
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = null)
+                Spacer(Modifier.width(5.dp))
+                Text("Smaller")
+            }
+            Text("${tab.textZoom}%", fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, color = palette.text)
+            OutlinedButton(
+                onClick = { setZoom(PageToolsPolicy.stepTextZoom(tab.textZoom, 1)) },
+                enabled = tab.textZoom < PageToolsPolicy.MAX_TEXT_ZOOM
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(5.dp))
+                Text("Larger")
+            }
+        }
+        TextButton(
+            onClick = { setZoom(PageToolsPolicy.DEFAULT_TEXT_ZOOM) },
+            enabled = tab.textZoom != PageToolsPolicy.DEFAULT_TEXT_ZOOM
+        ) {
+            Text("Reset text size to 100%")
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 
