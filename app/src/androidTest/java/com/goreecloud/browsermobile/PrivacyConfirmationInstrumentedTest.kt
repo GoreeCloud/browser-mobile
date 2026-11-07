@@ -164,6 +164,100 @@ class PrivacyConfirmationInstrumentedTest {
             manager.assignments[syntheticHost] == spaceId)
     }
 
+    @Test
+    fun confirmTurningOffHistoryClearsQASitesAndDisablesHistory() {
+        clickLabel("More options")
+        clickLabel("Privacy & DNS")
+        assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
+
+        clickHistorySwitch()
+        assertTrue("Disable-history confirmation absent",
+            awaitNode("Turn off visited websites?") != null)
+        clickLabel("Turn off & clear")
+        assertTrue("Confirmed dialog should dismiss", awaitAbsent("Turn off visited websites?"))
+
+        val library = BrowsingLibrary(instrumentation.targetContext)
+        assertTrue("History must be disabled after explicit confirmation", !library.historyEnabled)
+        assertTrue("Synthetic QA host must be cleared after confirmation",
+            library.sites.none { it.host == syntheticHost })
+    }
+
+    @Test
+    fun confirmClearHistoryDeletesQASiteButKeepsHistorySetting() {
+        clickLabel("More options")
+        clickLabel("Privacy & DNS")
+        assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
+
+        clickSheetAction("Clear recent websites and favicons")
+        assertTrue("History deletion confirmation absent",
+            awaitNode("Clear recent websites?") != null)
+        clickLabel("Clear history")
+        assertTrue("Confirmed dialog should dismiss", awaitAbsent("Clear recent websites?"))
+
+        val library = BrowsingLibrary(instrumentation.targetContext)
+        assertTrue("Clear history should preserve the opt-in setting", library.historyEnabled)
+        assertTrue("Synthetic QA host should be deleted by explicit confirmation",
+            library.sites.none { it.host == syntheticHost })
+    }
+
+    @Test
+    fun confirmCookieClearDeletesSyntheticQACookie() {
+        val url = "https://$syntheticHost/"
+        val cookies = CookieManager.getInstance()
+        instrumentation.runOnMainSync {
+            cookies.setAcceptCookie(true)
+            cookies.setCookie(url, "qa_confirm=delete; Path=/; Secure; SameSite=Lax")
+            cookies.flush()
+        }
+        assertTrue("Synthetic QA cookie must exist before Confirm",
+            cookies.getCookie(url)?.contains("qa_confirm=delete") == true)
+
+        clickLabel("More options")
+        clickLabel("Privacy & DNS")
+        assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
+        clickSheetAction("Clear all cookies and web storage")
+        assertTrue("Cookie deletion confirmation absent",
+            awaitNode("Clear cookies and site data?") != null)
+        clickLabel("Clear site data")
+        assertTrue("Confirmed cookie deletion should remove the synthetic cookie",
+            awaitCookieAbsent(cookies, url, "qa_confirm=delete"))
+    }
+
+    @Test
+    fun confirmCustomWebspaceRemovalDeletesOnlySyntheticSpaceAndRoute() {
+        val id = syntheticSpaceId
+            ?: throw AssertionError("Synthetic QA Webspace was not seeded")
+        clickLabel("More options")
+        clickLabel("Webspaces")
+        assertTrue("Webspaces panel did not open", awaitNode("Webspaces") != null)
+
+        clickSheetAction("Remove $syntheticSpaceName Webspace")
+        assertTrue("Webspace deletion confirmation absent",
+            awaitNode("Remove $syntheticSpaceName?") != null)
+        clickLabel("Remove Webspace")
+        assertTrue("Confirmed Webspace removal should dismiss",
+            awaitAbsent("Remove $syntheticSpaceName?"))
+
+        val manager = WebspacesManager(instrumentation.targetContext)
+        assertTrue("Synthetic QA Webspace should be removed",
+            manager.custom.none { it.id == id })
+        assertTrue("Removing a Webspace should clear its synthetic exact-host route",
+            syntheticHost !in manager.assignments)
+        assertTrue("Built-in Standard Webspace must remain",
+            manager.entries.any { it.id == "standard" })
+    }
+
+    private fun awaitCookieAbsent(
+        cookies: CookieManager, url: String, expected: String
+    ): Boolean {
+        val deadline = SystemClock.uptimeMillis() + 6_000L
+        do {
+            if (cookies.getCookie(url)?.contains(expected) != true) return true
+            Thread.sleep(100L)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return false
+    }
+
     private fun clickHistorySwitch() {
         repeat(12) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
