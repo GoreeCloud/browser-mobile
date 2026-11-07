@@ -36,6 +36,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,6 +80,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -126,6 +129,25 @@ private class BrowserTab {
     var blocked by mutableIntStateOf(0)
     var error by mutableStateOf<String?>(null)
     var webView: WebView? = null
+    // Session-only previews: never written to disk, synced or persisted.
+    var preview by mutableStateOf<Bitmap?>(null)
+}
+
+private fun captureTabPreview(tab: BrowserTab) {
+    if (tab.surface != Surface.WEB) return
+    val view = tab.webView ?: return
+    if (view.width <= 0 || view.height <= 0) return
+    // A small RGB_565 thumbnail keeps at most 12 previews memory-bounded.
+    runCatching {
+        val width = 240
+        val height = (width * view.height.toFloat() / view.width).toInt().coerceIn(200, 500)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        canvas.scale(width / view.width.toFloat(), width / view.width.toFloat())
+        view.draw(canvas)
+        if (tab.webView === view) tab.preview = bitmap
+    }
 }
 
 private data class GcPalette(
@@ -270,6 +292,8 @@ private fun configureWebView(
                 tab.requestTopLevelUrl = url
             }
             tab.title = view.title?.takeIf { it.isNotBlank() } ?: "Website"
+            // Refresh the cached, app-memory-only preview after a successful render.
+            view.post { if (tab.webView === view) captureTabPreview(tab) }
             if (!url.isNullOrBlank() && url.startsWith("https://", true)) {
                 library.record(url)
             }
@@ -340,6 +364,7 @@ private fun BrowserApp(
         val resolved = NavigationPolicy.resolve(input, preferences.cleanUrls)
         if (resolved.isBlank()) return
         current.error = null
+        current.preview = null
         current.url = resolved
         if (!current.pinnedWebspace) current.webspaceId = webspaces.destination(resolved)
         current.requestTopLevelUrl = resolved
@@ -350,6 +375,7 @@ private fun BrowserApp(
 
     fun openNewTab(webspace: String? = null) {
         if (tabs.size >= 12) {
+            captureTabPreview(current)
             panel = Panel.TABS
             return
         }
@@ -371,6 +397,7 @@ private fun BrowserApp(
     }
 
     fun closeTab(tab: BrowserTab) {
+        tab.preview = null
         if (tabs.size == 1) {
             tab.webView?.destroy()
             tab.webView = null
@@ -570,7 +597,10 @@ private fun BrowserApp(
             DockButton(Icons.Default.Add, "New tab", palette) {
                 openNewTab()
             }
-            TabCountDock(tabs.size, palette) { panel = Panel.TABS }
+            TabCountDock(tabs.size, palette) {
+                captureTabPreview(current)
+                panel = Panel.TABS
+            }
             BrowserOverflowMenu(
                 tab = current,
                 preferences = preferences,
@@ -581,51 +611,28 @@ private fun BrowserApp(
                 onHome = { current.surface = Surface.HOME }
             )
         }
+        if (panel == Panel.TABS) {
+            TabsOverviewPage(
+                tabs = tabs.toList(), activeId = activeId, palette = palette,
+                webspaces = webspaces,
+                onSelect = { tab ->
+                    captureTabPreview(current)
+                    activeId = tab.id
+                    panel = null
+                },
+                onClose = ::closeTab,
+                onNew = { captureTabPreview(current); openNewTab() },
+                onDone = { panel = null }
+            )
+        }
     }
 
-    if (panel != null) {
+    if (panel != null && panel != Panel.TABS) {
         ModalBottomSheet(
             onDismissRequest = { panel = null },
             containerColor = palette.surface, contentColor = palette.text
         ) {
             when (panel) {
-                Panel.TABS -> {
-                    SheetHeading("Your tabs", "${tabs.size} open · maximum 12", palette)
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 7.dp)) {
-                        items(tabs.toList(), key = { it.id }) { tab ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(bottom = 9.dp)
-                                    .background(
-                                        if (tab.id == activeId) palette.surfaceAlt else palette.canvas,
-                                        RoundedCornerShape(17.dp)
-                                    )
-                                    .clickable { activeId = tab.id; panel = null }
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Language, null, tint = palette.accent)
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(tab.title, color = palette.text, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                                    Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
-                                        ?: "Standard", color = palette.accent, fontSize = 10.sp)
-                                    Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
-                                        color = palette.muted, fontSize = 12.sp, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
-                                }
-                                IconButton(onClick = { closeTab(tab) }) {
-                                    Icon(Icons.Default.Close, "Close tab", tint = palette.muted)
-                                }
-                            }
-                        }
-                    }
-                    TextButton(onClick = { openNewTab() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
-                    }
-                    Spacer(Modifier.height(32.dp))
-                }
                 Panel.BOOKMARKS -> BookmarksPanel(
                     preferences = preferences, palette = palette,
                     openUrl = { url -> panel = null; openUrl(url) }
@@ -813,6 +820,185 @@ private fun NewTabPage(
             }
         }
         Spacer(Modifier.height(34.dp))
+    }
+}
+
+
+@Composable
+private fun TabsOverviewPage(
+    tabs: List<BrowserTab>,
+    activeId: String,
+    palette: GcPalette,
+    webspaces: WebspacesManager,
+    onSelect: (BrowserTab) -> Unit,
+    onClose: (BrowserTab) -> Unit,
+    onNew: () -> Unit,
+    onDone: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().background(palette.canvas)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 21.dp, end = 12.dp, top = 19.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Open tabs", color = palette.text, fontSize = 28.sp,
+                    letterSpacing = (-0.5).sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(3.dp))
+                Text("${tabs.size} of 12 tabs · Tap a preview to switch",
+                    color = palette.muted, fontSize = 12.sp)
+            }
+            IconButton(onClick = onDone, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Return to browser",
+                    tint = palette.text, modifier = Modifier.size(22.dp))
+            }
+        }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val columns = if (maxWidth < 330.dp || LocalDensity.current.fontScale >= 1.35f) 1 else 2
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(columns),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalItemSpacing = 12.dp
+            ) {
+                items(count = tabs.size, key = { tabs[it].id }) { index ->
+                    TabPreviewCard(
+                        tab = tabs[index], isActive = tabs[index].id == activeId,
+                        palette = palette, webspaceName = webspaces.entries.firstOrNull {
+                            it.id == tabs[index].webspaceId
+                        }?.name ?: "Standard",
+                        previewHeight = when (index % 3) {
+                            0 -> 244.dp
+                            1 -> 194.dp
+                            else -> 226.dp
+                        },
+                        onSelect = { onSelect(tabs[index]) },
+                        onClose = { onClose(tabs[index]) }
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 17.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = onNew,
+                enabled = tabs.size < 12,
+                modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.accent, contentColor = palette.accentOn
+                )
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("New tab", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TabPreviewCard(
+    tab: BrowserTab,
+    isActive: Boolean,
+    palette: GcPalette,
+    webspaceName: String,
+    previewHeight: Dp,
+    onSelect: () -> Unit,
+    onClose: () -> Unit
+) {
+    val preview = tab.preview
+    Surface(
+        onClick = onSelect,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = palette.surface,
+        border = BorderStroke(
+            if (isActive) 2.dp else 1.dp,
+            if (isActive) palette.accent else palette.outline
+        ),
+        shadowElevation = if (isActive) 6.dp else 2.dp
+    ) {
+        Column {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(previewHeight)
+                    .background(palette.surfaceAlt)
+            ) {
+                if (tab.surface == Surface.WEB && preview != null) {
+                    Image(
+                        bitmap = preview.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(17.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier.size(58.dp)
+                                .background(palette.surface, RoundedCornerShape(19.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                when (tab.surface) {
+                                    Surface.HOME -> Icons.Default.Home
+                                    Surface.NEW_TAB -> Icons.Default.Add
+                                    Surface.WEB -> Icons.Default.Language
+                                },
+                                contentDescription = null, tint = palette.accent,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            when (tab.surface) {
+                                Surface.NEW_TAB -> "New tab"
+                                Surface.HOME -> "Home"
+                                Surface.WEB -> "Preview unavailable"
+                            },
+                            color = palette.muted, fontSize = 12.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)
+                        .size(44.dp).background(palette.surface.copy(alpha = 0.96f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Close,
+                        contentDescription = "Close tab: ${tab.title}",
+                        tint = palette.text, modifier = Modifier.size(21.dp))
+                }
+                if (isActive) {
+                    Text(
+                        "CURRENT", color = palette.accentOn,
+                        fontWeight = FontWeight.Bold, fontSize = 10.sp,
+                        letterSpacing = 0.8.sp,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(10.dp)
+                            .background(palette.accent, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp)) {
+                Text(tab.title.ifBlank { "New tab" }, color = palette.text,
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    if (tab.surface == Surface.WEB) (VisitPolicy.host(tab.url) ?: "Website")
+                    else webspaceName,
+                    color = palette.muted, fontSize = 11.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
