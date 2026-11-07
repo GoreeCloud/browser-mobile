@@ -1357,6 +1357,9 @@ private fun PrivacyPanel(
     icons: SiteIcons
 ) {
     val message = remember { mutableStateOf("") }
+    var confirmHistoryDisable by remember { mutableStateOf(false) }
+    var confirmHistoryClear by remember { mutableStateOf(false) }
+    var confirmCookiesClear by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Privacy center", "Visible controls, no hidden promises", palette)
         Row(
@@ -1408,18 +1411,12 @@ private fun PrivacyPanel(
             "Remember visited websites",
             "Keeps up to 100 website hosts locally for Recent and Most Visited; no URLs or search terms.",
             library.historyEnabled, palette, { enabled ->
-                library.updateHistoryEnabled(enabled)
-                if (!enabled) {
-                    library.clear()
-                    icons.clear()
-                    message.value = "Local website history and favicons cleared"
-                }
+                if (enabled) library.updateHistoryEnabled(true)
+                else confirmHistoryDisable = true
             }
         )
         SheetAction(Icons.Default.Delete, "Clear recent websites and favicons", palette) {
-            library.clear()
-            icons.clear()
-            message.value = "Local website history and saved favicons cleared"
+            confirmHistoryClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         Text("FILTER SUBSCRIPTIONS", color = palette.muted, fontSize = 10.sp,
@@ -1470,11 +1467,7 @@ private fun PrivacyPanel(
             preferences.thirdPartyCookies, palette, preferences::updateThirdPartyCookies
         )
         SheetAction(Icons.Default.Delete, "Clear all cookies and web storage", palette) {
-            CookieManager.getInstance().removeAllCookies {
-                CookieManager.getInstance().flush()
-                WebStorage.getInstance().deleteAllData()
-                message.value = "Cookies and web storage cleared"
-            }
+            confirmCookiesClear = true
         }
         HorizontalDivider(color = palette.outline, modifier = Modifier.padding(horizontal = 20.dp))
         Text("DNS MANAGER", color = palette.muted, fontSize = 10.sp,
@@ -1497,6 +1490,73 @@ private fun PrivacyPanel(
                 fontSize = 12.sp)
         }
         Spacer(Modifier.height(32.dp))
+    }
+
+    if (confirmHistoryDisable) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryDisable = false },
+            title = { Text("Turn off visited websites?") },
+            text = {
+                Text("Turning this off also deletes the saved recent and most-visited " +
+                    "website hosts and their favicons on this device. Bookmarks remain.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.updateHistoryEnabled(false)
+                    library.clear()
+                    icons.clear()
+                    message.value = "Visited websites disabled; local history and favicons cleared"
+                    confirmHistoryDisable = false
+                }) { Text("Turn off & clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryDisable = false }) { Text("Cancel") }
+            }
+        )
+    }
+    if (confirmHistoryClear) {
+        AlertDialog(
+            onDismissRequest = { confirmHistoryClear = false },
+            title = { Text("Clear recent websites?") },
+            text = {
+                Text("This removes the local recent and most-visited hosts and saved " +
+                    "favicons. Bookmarks will not be deleted.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    library.clear()
+                    icons.clear()
+                    message.value = "Local website history and saved favicons cleared"
+                    confirmHistoryClear = false
+                }) { Text("Clear history") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHistoryClear = false }) { Text("Cancel") }
+            }
+        )
+    }
+    if (confirmCookiesClear) {
+        AlertDialog(
+            onDismissRequest = { confirmCookiesClear = false },
+            title = { Text("Clear cookies and site data?") },
+            text = {
+                Text("This may sign you out of websites and deletes all cookies " +
+                    "and WebView web storage for this browser.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCookiesClear = false
+                    CookieManager.getInstance().removeAllCookies {
+                        CookieManager.getInstance().flush()
+                        WebStorage.getInstance().deleteAllData()
+                        message.value = "Cookies and web storage cleared"
+                    }
+                }) { Text("Clear site data") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCookiesClear = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -1610,6 +1670,7 @@ private fun WebspacesPanel(
     open: (String) -> Unit, onRemove: (String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var pendingRemovalId by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         SheetHeading("Webspaces", "Organize tabs and route sites", palette)
         Text("Tab groups currently share WebView cookies; accounts are not isolated.",
@@ -1646,8 +1707,9 @@ private fun WebspacesPanel(
                     }) { Text("Route", fontSize = 11.sp) }
                 }
                 if (space.id.startsWith("custom-")) {
-                    IconButton(onClick = { onRemove(space.id) }) {
-                        Icon(Icons.Default.Delete, "Remove Webspace", tint = palette.muted)
+                    IconButton(onClick = { pendingRemovalId = space.id }) {
+                        Icon(Icons.Default.Delete, "Remove " + space.name + " Webspace",
+                            tint = palette.muted)
                     }
                 }
             }
@@ -1672,6 +1734,27 @@ private fun WebspacesPanel(
             ) { Text("Remove this site's routing rule") }
         }
         Spacer(Modifier.height(24.dp))
+    }
+
+    val pendingSpace = webspaces.entries.firstOrNull { it.id == pendingRemovalId }
+    if (pendingSpace != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRemovalId = null },
+            title = { Text("Remove " + pendingSpace.name + "?") },
+            text = {
+                Text("This deletes the Webspace and its site routing rules. Tabs in " +
+                    "this space move to Standard. Cookies and website accounts are not deleted.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(pendingSpace.id)
+                    pendingRemovalId = null
+                }) { Text("Remove Webspace") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemovalId = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
