@@ -54,6 +54,28 @@ class BrowserChromeScrollPolicyTest {
         assertTrue(policy.visibleAfterMove(120f, 1251L, false))
     }
 
+    @Test fun `new downward gesture reveals controls despite previous hide cooldown`() {
+        val policy = BrowserChromeScrollPolicy(thresholdPx = 40, minTransitionMs = 260L)
+        policy.beginGesture(240f)
+        assertFalse(policy.visibleAfterMove(190f, 1000L, true))
+        policy.endGesture()
+
+        // 100ms later a separate deliberate downward swipe should reveal,
+        // rather than being silently ignored by the previous gesture's cooldown.
+        policy.beginGesture(100f)
+        assertTrue(policy.visibleAfterMove(145f, 1100L, false))
+    }
+
+    @Test fun `new upward gesture hides controls despite previous reveal cooldown`() {
+        val policy = BrowserChromeScrollPolicy(thresholdPx = 40, minTransitionMs = 260L)
+        policy.beginGesture(100f)
+        assertTrue(policy.visibleAfterMove(150f, 1000L, false))
+        policy.endGesture()
+
+        policy.beginGesture(240f)
+        assertFalse(policy.visibleAfterMove(190f, 1100L, true))
+    }
+
     @Test fun `continued same-direction swipe does not oscillate`() {
         val policy = BrowserChromeScrollPolicy(thresholdPx = 22)
         policy.beginGesture(300f)
