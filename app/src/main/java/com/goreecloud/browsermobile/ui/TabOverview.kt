@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -53,7 +54,8 @@ internal data class TabOverviewColors(
 internal fun TabOverviewScreen(
     tabs: List<TabOverviewItem>, colors: TabOverviewColors,
     onSelect: (String) -> Unit, onClose: (String) -> Unit,
-    onNewTab: () -> Unit, onDismiss: () -> Unit
+    onNewTab: () -> Unit, onDismiss: () -> Unit,
+    onReopenClosed: (() -> Unit)?
 ) {
     Column(Modifier.fillMaxSize().background(colors.canvas)) {
         Row(
@@ -82,6 +84,23 @@ internal fun TabOverviewScreen(
                     tint = colors.accent, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(5.dp))
                 Text("New", color = colors.text, fontSize = 13.sp)
+            }
+        }
+        if (onReopenClosed != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Restore, contentDescription = null,
+                    tint = colors.accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(9.dp))
+                Text("A page was just closed",
+                    modifier = Modifier.weight(1f),
+                    color = colors.muted, fontSize = 12.sp)
+                TextButton(onClick = onReopenClosed) {
+                    Text("Reopen closed tab", color = colors.accent, fontSize = 12.sp)
+                }
             }
         }
         LazyVerticalStaggeredGrid(
