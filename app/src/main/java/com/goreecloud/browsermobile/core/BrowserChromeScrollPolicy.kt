@@ -1,40 +1,71 @@
 package com.goreecloud.browsermobile.core
 
 /**
- * Conservative scroll-direction policy for native Android WebView browser chrome.
+ * Browser chrome visibility driven by the user's actual vertical finger motion.
  *
- * Events are sourced from WebView's native scroll listener. Direction reversals
- * reset the accumulated distance, so small scroll jitter does not flicker the UI.
- * This class has no Android or Compose dependencies and makes no page network calls.
+ * Using WebView's reported scroll position to hide its own toolbar was unstable:
+ * the toolbar changes WebView height, which can produce synthetic scroll-position
+ * changes in the opposite direction. Finger coordinates remain independent of
+ * viewport resizing and also support websites with nested scrolling containers.
+ *
+ * Pointer events are observed (never consumed) by WebView; no page scripts,
+ * tracking, permissions, network requests, or persisted user data are involved.
  */
-class BrowserChromeScrollPolicy(private val thresholdPx: Int = 24) {
+class BrowserChromeScrollPolicy(
+    private val thresholdPx: Int = 96,
+    private val minTransitionMs: Long = 260L
+) {
     init {
-        require(thresholdPx > 0) { "Scroll threshold must be positive" }
+        require(thresholdPx > 0) { "Gesture threshold must be positive" }
+        require(minTransitionMs >= 0) { "Transition interval cannot be negative" }
     }
 
-    private var distance = 0
+    private var lastY: Float? = null
+    private var accumulated: Float = 0f
+    private var lastTransitionAtMs: Long? = null
 
+    /** Reset when changing tabs, navigating or explicitly revealing controls. */
     fun reset() {
-        distance = 0
+        endGesture()
+        lastTransitionAtMs = null
     }
 
-    fun visibleAfterScroll(newY: Int, oldY: Int, currentlyVisible: Boolean): Boolean {
-        if (newY <= 0) {
-            reset()
-            return true
-        }
-        val step = newY - oldY
-        if (step == 0) return currentlyVisible
+    fun beginGesture(y: Float) {
+        lastY = y
+        accumulated = 0f
+    }
 
-        if ((step > 0 && distance < 0) || (step < 0 && distance > 0)) {
-            distance = 0
-        }
-        distance = (distance + step).coerceIn(-thresholdPx, thresholdPx)
+    /** Never hide or reveal unless a single-finger gesture is in progress. */
+    fun visibleAfterMove(y: Float, eventTimeMs: Long, visible: Boolean): Boolean {
+        val previous = lastY ?: return visible
+        lastY = y
+        val delta = y - previous
+        if (delta == 0f) return visible
 
-        return when {
-            distance >= thresholdPx -> false
-            distance <= -thresholdPx -> true
-            else -> currentlyVisible
+        // Restart the travel count on direction reversals to reject jitter.
+        if ((delta > 0f && accumulated < 0f) || (delta < 0f && accumulated > 0f)) {
+            accumulated = 0f
         }
+        accumulated = (accumulated + delta).coerceIn(-thresholdPx.toFloat(), thresholdPx.toFloat())
+
+        val targetVisible = when {
+            accumulated <= -thresholdPx -> false // finger moves up: page scrolls down
+            accumulated >= thresholdPx -> true   // finger moves down: page scrolls up
+            else -> visible
+        }
+        if (targetVisible == visible) return visible
+
+        val last = lastTransitionAtMs
+        if (last != null && eventTimeMs >= last && eventTimeMs - last < minTransitionMs) {
+            return visible
+        }
+        accumulated = 0f
+        lastTransitionAtMs = eventTimeMs
+        return targetVisible
+    }
+
+    fun endGesture() {
+        lastY = null
+        accumulated = 0f
     }
 }
