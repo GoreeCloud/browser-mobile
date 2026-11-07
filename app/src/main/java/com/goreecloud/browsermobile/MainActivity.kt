@@ -762,11 +762,7 @@ private fun BrowserAddressBar(
                 cursorColor = palette.accent
             )
         )
-        Box(
-            modifier = Modifier.padding(end = 6.dp).size(49.dp)
-                .clickable(onClickLabel = "Go to address", onClick = onSubmit),
-            contentAlignment = Alignment.Center
-        ) {
+        IconButton(onClick = onSubmit, modifier = Modifier.padding(end = 6.dp).size(49.dp)) {
             Box(
                 modifier = Modifier.size(43.dp).clip(CircleShape)
                     .background(
@@ -776,7 +772,7 @@ private fun BrowserAddressBar(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.ArrowForward, contentDescription = null,
+                Icon(Icons.Default.ArrowForward, contentDescription = "Go to address",
                     tint = Color.White, modifier = Modifier.size(23.dp))
             }
         }
