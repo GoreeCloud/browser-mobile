@@ -26,6 +26,13 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
@@ -70,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -96,6 +104,7 @@ import com.goreecloud.browsermobile.core.SiteIcons
 import com.goreecloud.browsermobile.core.WebspacesManager
 import com.goreecloud.browsermobile.core.BrowserPreferences
 import com.goreecloud.browsermobile.core.NavigationPolicy
+import com.goreecloud.browsermobile.core.BrowserChromeScrollPolicy
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
@@ -214,7 +223,8 @@ private fun configureWebView(
     webspaces: WebspacesManager,
     icons: SiteIcons,
     onFaviconSaved: () -> Unit,
-    onUrlCleaned: (Int) -> Unit
+    onUrlCleaned: (Int) -> Unit,
+    onPageNavigation: () -> Unit
 ): WebView {
     val webView = WebView(activity)
     webView.settings.apply {
@@ -261,6 +271,7 @@ private fun configureWebView(
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            onPageNavigation()
             tab.thumbnail = null
             tab.loading = true
             tab.error = null
@@ -343,6 +354,15 @@ private fun BrowserApp(
     var panel by remember { mutableStateOf<Panel?>(null) }
     var cleanedCount by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
+    val scrollPolicy = remember { BrowserChromeScrollPolicy() }
+    var chromeVisible by remember { mutableStateOf(true) }
+    var addressFocused by remember { mutableStateOf(false) }
+    val showChrome = current.surface != Surface.WEB || chromeVisible || addressFocused
+
+    fun revealChrome() {
+        chromeVisible = true
+        scrollPolicy.reset()
+    }
 
     fun captureCurrentPreview() {
         if (current.surface == Surface.WEB) {
@@ -351,6 +371,7 @@ private fun BrowserApp(
     }
 
     fun openOverview() {
+        revealChrome()
         captureCurrentPreview()
         focus.clearFocus()
         panel = Panel.TABS
@@ -359,6 +380,7 @@ private fun BrowserApp(
     fun openUrl(input: String) {
         val resolved = NavigationPolicy.resolve(input, preferences.cleanUrls)
         if (resolved.isBlank()) return
+        revealChrome()
         current.error = null
         current.thumbnail = null
         current.url = resolved
@@ -417,6 +439,9 @@ private fun BrowserApp(
     LaunchedEffect(current.id, current.url, current.surface) {
         address = if (current.surface == Surface.WEB) current.url else ""
     }
+    LaunchedEffect(current.id, current.surface) {
+        revealChrome()
+    }
     LaunchedEffect(incomingUrl) {
         if (!incomingUrl.isNullOrBlank()) {
             openUrl(incomingUrl)
@@ -427,8 +452,10 @@ private fun BrowserApp(
     BackHandler(enabled = panel != null || current.surface == Surface.WEB) {
         when {
             panel != null -> panel = null
-            current.surface == Surface.WEB && current.webView?.canGoBack() == true ->
+            current.surface == Surface.WEB && current.webView?.canGoBack() == true -> {
+                revealChrome()
                 current.webView?.goBack()
+            }
             else -> {
                 captureCurrentPreview()
                 current.surface = Surface.HOME
@@ -441,77 +468,42 @@ private fun BrowserApp(
             .statusBarsPadding().navigationBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 18.dp, top = 9.dp, bottom = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Chrome occupies no vertical space once a webpage scrolls downward.
+            // Built-in Home/New Tab always show the address bar.
+            AnimatedVisibility(
+                visible = showChrome,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_browser_symbol),
-                    contentDescription = "GoreeCloud Browser Mobile",
-                    modifier = Modifier.size(46.dp)
+                BrowserAddressBar(
+                    palette = palette,
+                    urlIsSecure = current.surface == Surface.WEB &&
+                        current.url.startsWith("https://", ignoreCase = true),
+                    address = address,
+                    onAddressChange = { address = it },
+                    onSubmit = { openUrl(address) },
+                    onFocus = { focused ->
+                        addressFocused = focused
+                        if (focused) revealChrome()
+                    }
                 )
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("GoreeCloud", color = palette.text, fontSize = 19.sp,
-                        letterSpacing = (-0.35).sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(2.dp))
-                    Text("BROWSER MOBILE", color = palette.muted,
-                        fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.8.sp)
-                }
-                // The privacy controls remain available from the overflow menu.
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 7.dp)
-                    .shadow(5.dp, RoundedCornerShape(22.dp))
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(palette.surface)
-                    .border(0.8.dp, palette.outline.copy(alpha = 0.70f), RoundedCornerShape(22.dp)),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    if (current.surface == Surface.WEB) Icons.Default.Lock else Icons.Default.Search,
-                    contentDescription = null,
-                    tint = palette.accent,
-                    modifier = Modifier.padding(start = 17.dp).size(20.dp)
-                )
-                TextField(
-                    value = address, onValueChange = { address = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = {
-                        Text("Search or enter address", fontSize = 14.sp,
-                            color = palette.muted, maxLines = 1,
-                            softWrap = false, overflow = TextOverflow.Ellipsis)
-                    },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = palette.text),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { openUrl(address) }),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = palette.text, unfocusedTextColor = palette.text,
-                        cursorColor = palette.accent
-                    )
-                )
-                IconButton(
-                    onClick = { openUrl(address) },
-                    modifier = Modifier.padding(end = 6.dp).size(42.dp)
-                        .background(palette.surfaceAlt, RoundedCornerShape(15.dp))
-                ) {
-                    Icon(Icons.Default.ArrowForward, "Go", tint = palette.accent,
-                        modifier = Modifier.size(21.dp))
-                }
-            }
-            if (current.surface == Surface.WEB && current.loading) {
+            if (showChrome && current.surface == Surface.WEB && current.loading) {
                 LinearProgressIndicator(
                     progress = { current.progress / 100f },
                     modifier = Modifier.fillMaxWidth().height(2.dp),
                     color = palette.accent,
                     trackColor = palette.surfaceAlt
                 )
-            } else Spacer(Modifier.height(2.dp))
-
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(bottom = 82.dp)) {
+            }
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth().then(
+                    // The webpage reaches behind the floating dock. Internal pages
+                    // retain clearance so their controls are never obscured.
+                    if (current.surface == Surface.WEB) Modifier
+                    else Modifier.padding(bottom = 82.dp)
+                )
+            ) {
                 when (current.surface) {
                     Surface.NEW_TAB -> NewTabPage(
                         palette = palette, openUrl = ::openUrl,
@@ -536,8 +528,13 @@ private fun BrowserApp(
                                     val view = current.webView
                                         ?: configureWebView(
                                             activity, current, preferences, filterLists,
-                                            library, webspaces, icons, { faviconRevision++ }
-                                        ) { cleanedCount += it }
+                                            library, webspaces, icons,
+                                            onFaviconSaved = { faviconRevision++ },
+                                            onUrlCleaned = { cleanedCount += it },
+                                            onPageNavigation = {
+                                                if (activeId == current.id) revealChrome()
+                                            }
+                                        )
                                     (view.parent as? ViewGroup)?.removeView(view)
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(
                                         view, preferences.thirdPartyCookies
@@ -552,6 +549,17 @@ private fun BrowserApp(
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(
                                         view, preferences.thirdPartyCookies
                                     )
+                                    // Native scroll events: no injection into website JavaScript.
+                                    view.setOnScrollChangeListener { _, _, newY, _, oldY ->
+                                        if (activeId == current.id &&
+                                            current.surface == Surface.WEB &&
+                                            panel == null && !addressFocused
+                                        ) {
+                                            chromeVisible = scrollPolicy.visibleAfterScroll(
+                                                newY, oldY, chromeVisible
+                                            )
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -574,12 +582,19 @@ private fun BrowserApp(
                 }
             }
         }
-        Row(
-            modifier = Modifier.align(Alignment.BottomCenter)
+        AnimatedVisibility(
+            visible = showChrome,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+        ) {
+            Row(
+            modifier = Modifier
                 .padding(horizontal = 16.dp, vertical = 12.dp)
-                .shadow(11.dp, RoundedCornerShape(30.dp), clip = false)
-                .background(palette.surface.copy(alpha = 0.98f), RoundedCornerShape(30.dp))
-                .border(0.8.dp, palette.outline.copy(alpha = 0.75f), RoundedCornerShape(30.dp))
+                .shadow(14.dp, RoundedCornerShape(32.dp))
+                .clip(RoundedCornerShape(32.dp))
+                .background(palette.surface.copy(alpha = 0.93f), RoundedCornerShape(32.dp))
+                .border(1.dp, palette.outline.copy(alpha = 0.72f), RoundedCornerShape(32.dp))
                 .padding(horizontal = 7.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
@@ -612,6 +627,7 @@ private fun BrowserApp(
                     current.surface = Surface.HOME
                 }
             )
+        }
         }
         if (panel == Panel.TABS) {
             TabOverviewScreen(
@@ -688,6 +704,76 @@ private fun BrowserApp(
                     }
                 )
                 null -> Unit
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrowserAddressBar(
+    palette: GcPalette,
+    urlIsSecure: Boolean,
+    address: String,
+    onAddressChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onFocus: (Boolean) -> Unit
+) {
+    val pill = RoundedCornerShape(29.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 5.dp)
+            .shadow(10.dp, pill)
+            .clip(pill)
+            .background(palette.surface.copy(alpha = 0.97f))
+            .border(1.dp, palette.outline.copy(alpha = 0.76f), pill)
+            .heightIn(min = 56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.padding(start = 8.dp).size(44.dp)
+                .background(palette.surfaceAlt.copy(alpha = 0.82f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (urlIsSecure) Icons.Default.Lock else Icons.Default.Search,
+                contentDescription = if (urlIsSecure) "Secure HTTPS connection" else "Search",
+                tint = palette.accent, modifier = Modifier.size(21.dp)
+            )
+        }
+        TextField(
+            value = address,
+            onValueChange = onAddressChange,
+            modifier = Modifier.weight(1f).onFocusChanged { onFocus(it.isFocused) },
+            singleLine = true,
+            placeholder = {
+                Text("Search or enter address", fontSize = 14.sp, color = palette.muted,
+                    maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            },
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = palette.text),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = { onSubmit() }),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedTextColor = palette.text,
+                unfocusedTextColor = palette.text,
+                cursorColor = palette.accent
+            )
+        )
+        IconButton(onClick = onSubmit, modifier = Modifier.padding(end = 6.dp).size(49.dp)) {
+            Box(
+                modifier = Modifier.size(43.dp).clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF355FD8), palette.accent, Color(0xFF873BE0))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ArrowForward, contentDescription = "Go to address",
+                    tint = Color.White, modifier = Modifier.size(23.dp))
             }
         }
     }
