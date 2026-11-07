@@ -33,6 +33,9 @@ class BrowserChromeScrollPolicy(
     fun beginGesture(y: Float) {
         lastY = y
         accumulated = 0f
+        // Cooldown applies only within a continuous touch gesture. Carrying it
+        // across separate swipes can ignore a quick, intentional reverse swipe.
+        lastTransitionAtMs = null
     }
 
     /** Never hide or reveal unless a single-finger gesture is in progress. */
