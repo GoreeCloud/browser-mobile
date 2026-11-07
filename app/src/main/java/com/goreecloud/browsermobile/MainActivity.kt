@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.ViewGroup
+import android.view.MotionEvent
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
@@ -354,7 +355,12 @@ private fun BrowserApp(
     var panel by remember { mutableStateOf<Panel?>(null) }
     var cleanedCount by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
-    val scrollPolicy = remember { BrowserChromeScrollPolicy() }
+    // Convert a deliberate swipe distance to device pixels, not scrollY deltas.
+    // rawY is in screen coordinates and does not jump when chrome resizes WebView.
+    val scrollThresholdPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val scrollPolicy = remember(scrollThresholdPx) {
+        BrowserChromeScrollPolicy(thresholdPx = scrollThresholdPx)
+    }
     var chromeVisible by remember { mutableStateOf(true) }
     var addressFocused by remember { mutableStateOf(false) }
     val showChrome = current.surface != Surface.WEB || chromeVisible || addressFocused
@@ -549,16 +555,38 @@ private fun BrowserApp(
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(
                                         view, preferences.thirdPartyCookies
                                     )
-                                    // Native scroll events: no injection into website JavaScript.
-                                    view.setOnScrollChangeListener { _, _, newY, _, oldY ->
+                                    // Observe WebView pointer motion without consuming it.
+                                    // ScrollY reacts to changes in WebView viewport height,
+                                    // which previously caused the chrome to flicker.
+                                    view.setOnTouchListener { _, event ->
                                         if (activeId == current.id &&
                                             current.surface == Surface.WEB &&
                                             panel == null && !addressFocused
                                         ) {
-                                            chromeVisible = scrollPolicy.visibleAfterScroll(
-                                                newY, oldY, chromeVisible
-                                            )
+                                            when (event.actionMasked) {
+                                                MotionEvent.ACTION_DOWN -> {
+                                                    if (event.pointerCount == 1) {
+                                                        scrollPolicy.beginGesture(event.rawY)
+                                                    } else scrollPolicy.endGesture()
+                                                }
+                                                MotionEvent.ACTION_MOVE -> {
+                                                    if (event.pointerCount == 1) {
+                                                        chromeVisible = scrollPolicy.visibleAfterMove(
+                                                            y = event.rawY,
+                                                            eventTimeMs = event.eventTime,
+                                                            visible = chromeVisible
+                                                        )
+                                                    } else scrollPolicy.endGesture()
+                                                }
+                                                MotionEvent.ACTION_POINTER_DOWN,
+                                                MotionEvent.ACTION_POINTER_UP,
+                                                MotionEvent.ACTION_UP,
+                                                MotionEvent.ACTION_CANCEL -> scrollPolicy.endGesture()
+                                            }
+                                        } else {
+                                            scrollPolicy.endGesture()
                                         }
+                                        false // WebView retains scrolling, links and touch handling.
                                     }
                                 }
                             )
