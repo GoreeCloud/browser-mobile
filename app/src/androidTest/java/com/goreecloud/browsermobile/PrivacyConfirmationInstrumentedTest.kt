@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.goreecloud.browsermobile.core.BrowsingLibrary
+import com.goreecloud.browsermobile.core.WebspacesManager
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -28,6 +29,8 @@ class PrivacyConfirmationInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private var activity: Activity? = null
     private val syntheticHost = "confirmation-smoke.example.test"
+    private val syntheticSpaceName = "QA Review Space"
+    private var syntheticSpaceId: String? = null
 
     @Before
     fun launchIsolatedApp() {
@@ -39,6 +42,14 @@ class PrivacyConfirmationInstrumentedTest {
             updateHistoryEnabled(true)
             clear()
             record("https://$syntheticHost/")
+        }
+        // Seed only inside the disposable QA package before the Activity loads its manager.
+        WebspacesManager(context).apply {
+            custom.filter { it.name == syntheticSpaceName }.map { it.id }.forEach(::remove)
+            val seeded = create(syntheticSpaceName)
+                ?: throw AssertionError("Failed to create the synthetic QA Webspace")
+            syntheticSpaceId = seeded.id
+            assign("https://$syntheticHost/", seeded.id)
         }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.goreecloud.com/")).apply {
             setClass(context, MainActivity::class.java)
@@ -55,6 +66,9 @@ class PrivacyConfirmationInstrumentedTest {
             instrumentation.runOnMainSync { running.finish() }
             instrumentation.waitForIdleSync()
         }
+        // This only removes data seeded in the disposable .qa application.
+        syntheticSpaceId?.let { WebspacesManager(instrumentation.targetContext).remove(it) }
+        syntheticSpaceId = null
     }
 
     @Test
@@ -63,7 +77,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickPrivacyAction("Clear recent websites and favicons")
+        clickSheetAction("Clear recent websites and favicons")
         assertTrue("Destructive history action must show a confirmation",
             awaitNode("Clear recent websites?") != null)
         assertTrue("Confirmation must offer a cancel action", awaitNode("Cancel") != null)
@@ -91,7 +105,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickPrivacyAction("Clear all cookies and web storage")
+        clickSheetAction("Clear all cookies and web storage")
         assertTrue("Cookie deletion must require confirmation",
             awaitNode("Clear cookies and site data?") != null)
         assertTrue("User must be offered a non-destructive exit",
@@ -106,8 +120,93 @@ class PrivacyConfirmationInstrumentedTest {
             cookies.getCookie(testUrl)?.contains("qa_cancel=preserved") == true)
     }
 
-    /** The Privacy sheet starts partially expanded and may need real swipe gestures. */
-    private fun clickPrivacyAction(label: String) {
+    @Test
+    fun cancelTurningOffHistoryKeepsOptInAndSyntheticHost() {
+        clickLabel("More options")
+        clickLabel("Privacy & DNS")
+        assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
+
+        clickHistorySwitch()
+        assertTrue("Disabling history must require confirmation",
+            awaitNode("Turn off visited websites?") != null)
+        assertTrue("Confirmation must provide a non-destructive Cancel",
+            awaitNode("Cancel") != null)
+        clickLabel("Cancel")
+
+        assertTrue("Disable-history dialog should close on Cancel",
+            awaitAbsent("Turn off visited websites?"))
+        val library = BrowsingLibrary(instrumentation.targetContext)
+        assertTrue("Cancel must preserve the enabled history setting", library.historyEnabled)
+        assertTrue("Cancel must retain the synthetic saved host",
+            library.sites.any { it.host == syntheticHost })
+    }
+
+    @Test
+    fun cancelCustomWebspaceRemovalPreservesSpaceAndRouting() {
+        val spaceId = syntheticSpaceId
+            ?: throw AssertionError("Synthetic QA Webspace was not seeded")
+        clickLabel("More options")
+        clickLabel("Webspaces")
+        assertTrue("Webspaces panel did not open", awaitNode("Webspaces") != null)
+
+        clickSheetAction("Remove $syntheticSpaceName Webspace")
+        assertTrue("Webspace removal must require confirmation",
+            awaitNode("Remove $syntheticSpaceName?") != null)
+        assertTrue("Webspace removal needs a Cancel action", awaitNode("Cancel") != null)
+        clickLabel("Cancel")
+
+        assertTrue("Webspace confirmation should close on Cancel",
+            awaitAbsent("Remove $syntheticSpaceName?"))
+        val manager = WebspacesManager(instrumentation.targetContext)
+        assertTrue("Cancel must preserve the synthetic Webspace",
+            manager.custom.any { it.id == spaceId && it.name == syntheticSpaceName })
+        assertTrue("Cancel must preserve its synthetic exact-host route",
+            manager.assignments[syntheticHost] == spaceId)
+    }
+
+    private fun clickHistorySwitch() {
+        repeat(12) {
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val label = root?.let { findNode(it, "Remember visited websites") }
+            if (root != null && label != null) {
+                val labelBounds = android.graphics.Rect()
+                label.getBoundsInScreen(labelBounds)
+                val switches = mutableListOf<AccessibilityNodeInfo>()
+                collectCheckableControls(root, switches)
+                // Compose's text and switch can be different semantics subtrees.
+                // Match their screen row, never select the first switch in the sheet.
+                val match = switches.mapNotNull { control ->
+                    val bounds = android.graphics.Rect()
+                    control.getBoundsInScreen(bounds)
+                    val offset = kotlin.math.abs(bounds.centerY() - labelBounds.centerY())
+                    if (bounds.left > labelBounds.right && offset <= 120) {
+                        control to offset
+                    } else null
+                }.minByOrNull { it.second }?.first
+                if (match != null) {
+                    assertTrue("History switch must be enabled before cancellation", match.isChecked)
+                    assertTrue("History switch did not accept accessibility click",
+                        match.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    instrumentation.waitForIdleSync()
+                    return
+                }
+            }
+            swipePrivacySheetUp()
+        }
+        throw AssertionError("Could not locate the switch beside the history setting")
+    }
+
+    private fun collectCheckableControls(
+        node: AccessibilityNodeInfo, result: MutableList<AccessibilityNodeInfo>
+    ) {
+        if (node.isCheckable && node.isClickable) result.add(node)
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { collectCheckableControls(it, result) }
+        }
+    }
+
+    /** A bottom sheet starts partially expanded and may need real swipe gestures. */
+    private fun clickSheetAction(label: String) {
         repeat(12) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             if (root != null && findNode(root, label) != null) {
@@ -119,7 +218,7 @@ class PrivacyConfirmationInstrumentedTest {
         throw AssertionError("Privacy control remained off-screen: $label")
     }
 
-    /** WebView is covered by the modal sheet; this gesture scrolls QA sheet content. */
+    /** Drag the active modal sheet without touching the underlying WebView. */
     private fun swipePrivacySheetUp() {
         val metrics = instrumentation.targetContext.resources.displayMetrics
         val x = metrics.widthPixels * 0.5f
