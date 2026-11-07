@@ -721,12 +721,12 @@ private fun BrowserAddressBar(
     val pill = RoundedCornerShape(29.dp)
     Row(
         modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 8.dp)
-            .shadow(11.dp, pill)
+            .padding(horizontal = 18.dp, vertical = 5.dp)
+            .shadow(10.dp, pill)
             .clip(pill)
             .background(palette.surface.copy(alpha = 0.97f))
             .border(1.dp, palette.outline.copy(alpha = 0.76f), pill)
-            .heightIn(min = 62.dp),
+            .heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -764,17 +764,21 @@ private fun BrowserAddressBar(
         )
         Box(
             modifier = Modifier.padding(end = 6.dp).size(49.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF355FD8), palette.accent, Color(0xFF873BE0))
-                    )
-                )
                 .clickable(onClickLabel = "Go to address", onClick = onSubmit),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.ArrowForward, contentDescription = null,
-                tint = Color.White, modifier = Modifier.size(25.dp))
+            Box(
+                modifier = Modifier.size(43.dp).clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF355FD8), palette.accent, Color(0xFF873BE0))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ArrowForward, contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(23.dp))
+            }
         }
     }
 }
