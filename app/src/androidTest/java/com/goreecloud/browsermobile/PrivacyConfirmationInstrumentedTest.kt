@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -92,33 +94,45 @@ class PrivacyConfirmationInstrumentedTest {
             awaitNode("Privacy center") != null)
     }
 
-    /** The Privacy sheet opens partially expanded; controls may start off-screen. */
+    /** The Privacy sheet starts partially expanded and may need real swipe gestures. */
     private fun clickPrivacyAction(label: String) {
-        repeat(14) {
+        repeat(12) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             if (root != null && findNode(root, label) != null) {
                 clickLabel(label)
                 return
             }
-            val scrollView = root?.let { findPrivacyScrollView(it) }
-                ?: throw AssertionError("Privacy sheet has no accessible scrolling container")
-            assertTrue("Privacy sheet did not scroll toward $label",
-                scrollView.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
-            instrumentation.waitForIdleSync()
+            swipePrivacySheetUp()
         }
-        throw AssertionError("Privacy action remained off-screen after scrolling: $label")
+        throw AssertionError("Privacy control remained off-screen: $label")
     }
 
-    private fun findPrivacyScrollView(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isScrollable && node.className?.toString() == "android.widget.ScrollView") {
-            return node
-        }
-        for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { child ->
-                findPrivacyScrollView(child)?.let { return it }
+    /** WebView is covered by the modal sheet; this gesture scrolls QA sheet content. */
+    private fun swipePrivacySheetUp() {
+        val metrics = instrumentation.targetContext.resources.displayMetrics
+        val x = metrics.widthPixels * 0.5f
+        val firstY = metrics.heightPixels * 0.85f
+        val lastY = metrics.heightPixels * 0.61f
+        val downAt = SystemClock.uptimeMillis()
+        for (step in 0..14) {
+            val type = when (step) {
+                0 -> MotionEvent.ACTION_DOWN
+                14 -> MotionEvent.ACTION_UP
+                else -> MotionEvent.ACTION_MOVE
             }
+            val event = MotionEvent.obtain(
+                downAt, SystemClock.uptimeMillis(), type,
+                x, firstY + (lastY - firstY) * (step / 14f), 0
+            )
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            try {
+                instrumentation.sendPointerSync(event)
+            } finally {
+                event.recycle()
+            }
+            Thread.sleep(22L)
         }
-        return null
+        instrumentation.waitForIdleSync()
     }
 
     private fun clickLabel(label: String) {
