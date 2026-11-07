@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.webkit.CookieManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -77,6 +78,15 @@ class PrivacyConfirmationInstrumentedTest {
 
     @Test
     fun cancelCookieClearClosesDialogWithoutProceeding() {
+        val testUrl = "https://$syntheticHost/"
+        val cookies = CookieManager.getInstance()
+        instrumentation.runOnMainSync {
+            cookies.setAcceptCookie(true)
+            cookies.setCookie(testUrl, "qa_cancel=preserved; Path=/; Secure; SameSite=Lax")
+            cookies.flush()
+        }
+        assertTrue("Synthetic QA cookie must exist before cancellation test",
+            cookies.getCookie(testUrl)?.contains("qa_cancel=preserved") == true)
         clickLabel("More options")
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
@@ -90,8 +100,10 @@ class PrivacyConfirmationInstrumentedTest {
 
         assertTrue("Cookie confirmation should dismiss without deletion",
             awaitAbsent("Clear cookies and site data?"))
-        assertTrue("Privacy settings should remain open",
-            awaitNode("Privacy center") != null)
+        assertTrue("Browser data-clear action should remain available in the sheet",
+            awaitNode("Clear all cookies and web storage") != null)
+        assertTrue("Cancel must retain the original synthetic QA cookie",
+            cookies.getCookie(testUrl)?.contains("qa_cancel=preserved") == true)
     }
 
     /** The Privacy sheet starts partially expanded and may need real swipe gestures. */
