@@ -61,3 +61,13 @@ See [source-grounded New Tab mockup audit](NEW_TAB_MOCKUP_AUDIT.md) and [UI acce
 Source improvements now include a simplified open-ring/forward-arrow vector (header, adaptive launcher and monochrome), canonical central brand-assets revision [e02c3d5](https://github.com/GoreeCloud/brand-assets/commit/e02c3d5), a raised search field, grouped editorial New Tab hero, subtle native orbit ambience, an elevated navy Startpage feature card and tonal Quick Access tiles. Up to two real visited hosts appear beneath the shortcuts when app-private website-host history is enabled. The founder-requested neutral New Tab action and removal of the top privacy badge were preserved.
 
 A debug build was installed on the authorized OnePlus N200 and visually inspected in light/dark and at 100%/130% text. In the initial screen review, the dot/eyebrow floated too far from the heading; grouping those elements into one hero was the final polish correction. No AI image generation occurred. This is source-and-device preview validation, **not founder visual approval or comprehensive accessibility acceptance**.
+
+## November 6 — founder-approved Prism Tabs v5 identity adoption
+
+The founder approved the exact **Prism Tabs v5** source and directed use in both Android Browser Mobile and Linux-first GoreeCloud Browser. The canonical shared source was merged through [brand-assets PR #10](https://github.com/GoreeCloud/brand-assets/pull/10) at commit `1b12ecbb043c89b4f461e68ce2cd83b5fd70eb3f`. It replaces the prior rejected ring-and-arrow Android icon, not the app's navigation or data model.
+
+Verified on the authorized OnePlus N200 Android 16: `adb install -r` succeeded without wiping application data, the modified debug APK launched, and source-grounded visual screenshots showed Prism Tabs v5 in the native browser header and in Android's App Info launcher icon under a circular mask. The packaging retains safe-padded transparent adaptive foreground and themed monochrome derived from the same silhouette. The mono/themed color and full OEM mask range are not independently certified.
+
+Locally `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug` passed, 26 JVM tests passed, debug APK signature verified with Android v2 and `python3 scripts/check_brand_assets.py` verified 3 central-source SVG blob IDs, 3 PNG SHA-256 fingerprints and adaptive icon links. CI must be checked for the consumer commit separately.
+
+All screenshots remained private on the authorized test computer. No image generation, public APK release, default-browser change or Stable qualification was performed. See [source and derivative mapping](BRANDING.md).
