@@ -73,6 +73,25 @@ class PrivacyConfirmationInstrumentedTest {
             })
     }
 
+    @Test
+    fun cancelCookieClearClosesDialogWithoutProceeding() {
+        clickLabel("More options")
+        clickLabel("Privacy & DNS")
+        assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
+
+        clickLabel("Clear all cookies and web storage")
+        assertTrue("Cookie deletion must require confirmation",
+            awaitNode("Clear cookies and site data?") != null)
+        assertTrue("User must be offered a non-destructive exit",
+            awaitNode("Cancel") != null)
+        clickLabel("Cancel")
+
+        assertTrue("Cookie confirmation should dismiss without deletion",
+            awaitAbsent("Clear cookies and site data?"))
+        assertTrue("Privacy settings should remain open",
+            awaitNode("Privacy center") != null)
+    }
+
     private fun clickLabel(label: String) {
         var node = awaitNode(label)
             ?: throw AssertionError("Control not present: $label")
