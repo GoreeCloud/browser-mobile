@@ -64,6 +64,22 @@ class ChromeGestureInstrumentedTest {
     }
 
     @Test
+    fun rapidSeparateOppositeSwipesHideThenRevealBothBars() {
+        val metrics = instrumentation.targetContext.resources.displayMetrics
+        val x = metrics.widthPixels * 0.5f
+        val high = metrics.heightPixels * 0.32f
+        val low = metrics.heightPixels * 0.74f
+
+        // Two short-duration but deliberate separate finger gestures.
+        sendSwipe(x, low, high, steps = 6, pauseMs = 6L)
+        assertTrue("Fast upward swipe must hide both bars",
+            awaitChrome(visible = false, timeoutMs = 2_000))
+        sendSwipe(x, high, low, steps = 6, pauseMs = 6L)
+        assertTrue("Next deliberate reverse gesture must reveal both bars",
+            awaitChrome(visible = true, timeoutMs = 2_000))
+    }
+
+    @Test
     fun shortVerticalMovementDoesNotHideChrome() {
         val display = instrumentation.targetContext.resources.displayMetrics
         val x = display.widthPixels * 0.5f
@@ -81,13 +97,17 @@ class ChromeGestureInstrumentedTest {
         sendSwipe(x, if (upward) low else high, if (upward) high else low)
     }
 
-    private fun sendSwipe(x: Float, startY: Float, endY: Float) {
+    private fun sendSwipe(
+        x: Float, startY: Float, endY: Float,
+        steps: Int = 12, pauseMs: Long = 24L
+    ) {
+        require(steps >= 2 && pauseMs >= 0L)
         val downTime = SystemClock.uptimeMillis()
-        for (step in 0..12) {
-            val fraction = step / 12f
+        for (step in 0..steps) {
+            val fraction = step / steps.toFloat()
             val action = when (step) {
                 0 -> MotionEvent.ACTION_DOWN
-                12 -> MotionEvent.ACTION_UP
+                steps -> MotionEvent.ACTION_UP
                 else -> MotionEvent.ACTION_MOVE
             }
             val event = MotionEvent.obtain(
@@ -100,7 +120,7 @@ class ChromeGestureInstrumentedTest {
             } finally {
                 event.recycle()
             }
-            Thread.sleep(24L)
+            Thread.sleep(pauseMs)
         }
         instrumentation.waitForIdleSync()
     }
