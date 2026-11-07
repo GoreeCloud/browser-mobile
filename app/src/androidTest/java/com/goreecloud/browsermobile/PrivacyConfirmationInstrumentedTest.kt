@@ -60,7 +60,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickLabel("Clear recent websites and favicons")
+        clickPrivacyAction("Clear recent websites and favicons")
         assertTrue("Destructive history action must show a confirmation",
             awaitNode("Clear recent websites?") != null)
         assertTrue("Confirmation must offer a cancel action", awaitNode("Cancel") != null)
@@ -79,7 +79,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickLabel("Clear all cookies and web storage")
+        clickPrivacyAction("Clear all cookies and web storage")
         assertTrue("Cookie deletion must require confirmation",
             awaitNode("Clear cookies and site data?") != null)
         assertTrue("User must be offered a non-destructive exit",
@@ -90,6 +90,35 @@ class PrivacyConfirmationInstrumentedTest {
             awaitAbsent("Clear cookies and site data?"))
         assertTrue("Privacy settings should remain open",
             awaitNode("Privacy center") != null)
+    }
+
+    /** The Privacy sheet opens partially expanded; controls may start off-screen. */
+    private fun clickPrivacyAction(label: String) {
+        repeat(14) {
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            if (root != null && findNode(root, label) != null) {
+                clickLabel(label)
+                return
+            }
+            val scrollView = root?.let { findPrivacyScrollView(it) }
+                ?: throw AssertionError("Privacy sheet has no accessible scrolling container")
+            assertTrue("Privacy sheet did not scroll toward $label",
+                scrollView.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
+            instrumentation.waitForIdleSync()
+        }
+        throw AssertionError("Privacy action remained off-screen after scrolling: $label")
+    }
+
+    private fun findPrivacyScrollView(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isScrollable && node.className?.toString() == "android.widget.ScrollView") {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            node.getChild(i)?.let { child ->
+                findPrivacyScrollView(child)?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun clickLabel(label: String) {
