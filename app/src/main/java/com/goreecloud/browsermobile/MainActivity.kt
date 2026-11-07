@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.ViewGroup
 import android.view.MotionEvent
@@ -118,6 +119,9 @@ import com.goreecloud.browsermobile.core.NavigationPolicy
 import com.goreecloud.browsermobile.core.BrowserChromeScrollPolicy
 import com.goreecloud.browsermobile.core.PageToolsPolicy
 import com.goreecloud.browsermobile.core.PageActionPolicy
+import com.goreecloud.browsermobile.core.TabActionPolicy
+import com.goreecloud.browsermobile.core.RecentlyClosedPage
+import kotlinx.coroutines.delay
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
@@ -397,6 +401,10 @@ private fun BrowserApp(
     var address by remember { mutableStateOf("") }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var cleanedCount by remember { mutableIntStateOf(0) }
+    // Exactly one recently closed HTTPS address, only for 30 seconds in RAM.
+    // Never retain page bitmaps, form values, POST bodies or serialized WebViews.
+    var recentlyClosed by remember { mutableStateOf<RecentlyClosedPage?>(null) }
+    var closeEpoch by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
     // Convert a deliberate swipe distance to device pixels, not scrollY deltas.
     // rawY is in screen coordinates and does not jump when chrome resizes WebView.
@@ -490,6 +498,53 @@ private fun BrowserApp(
         panel = null
     }
 
+    fun duplicateCurrentTab() {
+        val source = current
+        if (source.surface != Surface.WEB ||
+            !TabActionPolicy.canDuplicate(source.url, tabs.size)) return
+        captureCurrentPreview()
+        val copy = BrowserTab().apply {
+            surface = Surface.WEB
+            url = source.url
+            requestTopLevelUrl = source.url
+            title = source.title
+            webspaceId = source.webspaceId
+            pinnedWebspace = source.pinnedWebspace
+            textZoom = source.textZoom
+            // New WebView intentionally starts with mobile UA and no form/DOM state.
+        }
+        tabs.add(copy)
+        activeId = copy.id
+        panel = null
+        focus.clearFocus()
+        revealChrome()
+    }
+
+    fun reopenClosedPage() {
+        val snapshot = recentlyClosed
+        if (!TabActionPolicy.canReopen(snapshot, SystemClock.elapsedRealtime(), tabs.size)) {
+            recentlyClosed = null
+            return
+        }
+        val page = snapshot ?: return
+        recentlyClosed = null // One-shot restore: never keep a longer URL trail.
+        val webspaceExists = webspaces.entries.any { it.id == page.webspaceId }
+        val target = if (tabs.size == 1 && tabs.first().surface == Surface.NEW_TAB &&
+            tabs.first().url.isBlank() && tabs.first().webView == null) {
+            tabs.first()
+        } else BrowserTab().also { tabs.add(it) }
+        target.surface = Surface.WEB
+        target.url = page.url
+        target.requestTopLevelUrl = page.url
+        target.title = page.title
+        target.webspaceId = if (webspaceExists) page.webspaceId else "standard"
+        target.pinnedWebspace = page.pinnedWebspace && webspaceExists
+        activeId = target.id
+        panel = null
+        focus.clearFocus()
+        revealChrome()
+    }
+
     fun openWebspace(id: String) {
         val found = tabs.firstOrNull { it.webspaceId == id }
         if (found != null) {
@@ -500,6 +555,16 @@ private fun BrowserApp(
     }
 
     fun closeTab(tab: BrowserTab) {
+        recentlyClosed = if (tab.surface == Surface.WEB) {
+            TabActionPolicy.snapshot(
+                url = tab.url,
+                title = tab.title,
+                webspaceId = tab.webspaceId,
+                pinnedWebspace = tab.pinnedWebspace,
+                closedAtElapsedMs = SystemClock.elapsedRealtime()
+            )
+        } else null
+        closeEpoch++
         if (tabs.size == 1) {
             tab.thumbnail = null
             tab.webView?.destroy()
@@ -521,6 +586,13 @@ private fun BrowserApp(
             tab.webView?.stopLoading()
             tab.webView?.destroy()
             tab.webView = null
+        }
+    }
+
+    LaunchedEffect(closeEpoch) {
+        if (recentlyClosed != null) {
+            delay(TabActionPolicy.REOPEN_WINDOW_MS)
+            recentlyClosed = null
         }
     }
 
@@ -750,6 +822,9 @@ private fun BrowserApp(
                 onTextSize = { revealChrome(); panel = Panel.TEXT_SIZE },
                 onCopyCleanLink = { copyCleanLink(current) },
                 onToggleDesktopSite = { toggleDesktopSite(current) },
+                canDuplicate = current.surface == Surface.WEB &&
+                    TabActionPolicy.canDuplicate(current.url, tabs.size),
+                onDuplicateTab = { duplicateCurrentTab() },
                 onHome = {
                     captureCurrentPreview()
                     current.surface = Surface.HOME
@@ -795,6 +870,9 @@ private fun BrowserApp(
                     panel = null
                 },
                 onClose = { id -> tabs.firstOrNull { it.id == id }?.let(::closeTab) },
+                onReopenClosed = if (TabActionPolicy.canReopen(
+                    recentlyClosed, SystemClock.elapsedRealtime(), tabs.size
+                )) ({ reopenClosedPage() }) else null,
                 onNewTab = { openNewTab() },
                 onDismiss = { panel = null }
             )
@@ -1865,7 +1943,8 @@ private fun BrowserOverflowMenu(
     palette: GcPalette, activity: Activity,
     onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit,
     onFind: () -> Unit, onTextSize: () -> Unit,
-    onCopyCleanLink: () -> Unit, onToggleDesktopSite: () -> Unit
+    onCopyCleanLink: () -> Unit, onToggleDesktopSite: () -> Unit,
+    canDuplicate: Boolean, onDuplicateTab: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val canAct = tab.surface == Surface.WEB
@@ -1955,6 +2034,12 @@ private fun BrowserOverflowMenu(
                     MenuNavigationItem(Icons.Default.FormatSize, "Text size", palette) {
                         expanded = false
                         onTextSize()
+                    }
+                    if (canDuplicate) {
+                        MenuNavigationItem(Icons.Default.Tab, "Duplicate tab", palette) {
+                            expanded = false
+                            onDuplicateTab()
+                        }
                     }
                 }
                 MenuNavigationItem(Icons.Default.Language, "Webspaces", palette) {
