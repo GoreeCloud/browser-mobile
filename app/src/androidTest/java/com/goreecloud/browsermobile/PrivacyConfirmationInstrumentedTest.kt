@@ -77,7 +77,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickPrivacyAction("Clear recent websites and favicons")
+        clickSheetAction("Clear recent websites and favicons")
         assertTrue("Destructive history action must show a confirmation",
             awaitNode("Clear recent websites?") != null)
         assertTrue("Confirmation must offer a cancel action", awaitNode("Cancel") != null)
@@ -105,7 +105,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Privacy & DNS")
         assertTrue("Privacy center did not open", awaitNode("Privacy center") != null)
 
-        clickPrivacyAction("Clear all cookies and web storage")
+        clickSheetAction("Clear all cookies and web storage")
         assertTrue("Cookie deletion must require confirmation",
             awaitNode("Clear cookies and site data?") != null)
         assertTrue("User must be offered a non-destructive exit",
@@ -149,7 +149,7 @@ class PrivacyConfirmationInstrumentedTest {
         clickLabel("Webspaces")
         assertTrue("Webspaces panel did not open", awaitNode("Webspaces") != null)
 
-        clickPrivacyAction("Remove $syntheticSpaceName Webspace")
+        clickSheetAction("Remove $syntheticSpaceName Webspace")
         assertTrue("Webspace removal must require confirmation",
             awaitNode("Remove $syntheticSpaceName?") != null)
         assertTrue("Webspace removal needs a Cancel action", awaitNode("Cancel") != null)
@@ -168,36 +168,45 @@ class PrivacyConfirmationInstrumentedTest {
         repeat(12) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             val label = root?.let { findNode(it, "Remember visited websites") }
-            if (label != null) {
-                var ancestor = label.parent
-                repeat(3) {
-                    val switch = ancestor?.let { findCheckableDescendant(it) }
-                    if (switch != null && switch.isClickable) {
-                        assertTrue("History switch did not accept accessibility click",
-                            switch.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-                        instrumentation.waitForIdleSync()
-                        return
-                    }
-                    ancestor = ancestor?.parent
+            if (root != null && label != null) {
+                val labelBounds = android.graphics.Rect()
+                label.getBoundsInScreen(labelBounds)
+                val switches = mutableListOf<AccessibilityNodeInfo>()
+                collectCheckableControls(root, switches)
+                // Compose's text and switch can be different semantics subtrees.
+                // Match their screen row, never select the first switch in the sheet.
+                val match = switches.mapNotNull { control ->
+                    val bounds = android.graphics.Rect()
+                    control.getBoundsInScreen(bounds)
+                    val offset = kotlin.math.abs(bounds.centerY() - labelBounds.centerY())
+                    if (bounds.left > labelBounds.right && offset <= 120) {
+                        control to offset
+                    } else null
+                }.minByOrNull { it.second }?.first
+                if (match != null) {
+                    assertTrue("History switch must be enabled before cancellation", match.isChecked)
+                    assertTrue("History switch did not accept accessibility click",
+                        match.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    instrumentation.waitForIdleSync()
+                    return
                 }
             }
             swipePrivacySheetUp()
         }
-        throw AssertionError("Could not locate the history switch beside its label")
+        throw AssertionError("Could not locate the switch beside the history setting")
     }
 
-    private fun findCheckableDescendant(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isCheckable && node.isClickable) return node
+    private fun collectCheckableControls(
+        node: AccessibilityNodeInfo, result: MutableList<AccessibilityNodeInfo>
+    ) {
+        if (node.isCheckable && node.isClickable) result.add(node)
         for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { child ->
-                findCheckableDescendant(child)?.let { return it }
-            }
+            node.getChild(i)?.let { collectCheckableControls(it, result) }
         }
-        return null
     }
 
     /** A bottom sheet starts partially expanded and may need real swipe gestures. */
-    private fun clickPrivacyAction(label: String) {
+    private fun clickSheetAction(label: String) {
         repeat(12) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             if (root != null && findNode(root, label) != null) {
