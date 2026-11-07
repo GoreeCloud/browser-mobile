@@ -171,6 +171,32 @@ class PageToolsInstrumentedTest {
         return false
     }
 
+    @Test
+    fun duplicateTabOpensSeparateTabAndPreservesExistingTabCount() {
+        clickLabel("More options")
+        clickLabel("Duplicate tab")
+        assertTrue("A duplicate should open a separate second tab",
+            awaitNode("Tabs: 2") != null)
+        clickLabel("Tabs: 2")
+        assertTrue("Both tabs must appear in the full-screen overview",
+            awaitNode("2 open · Tap a preview to switch") != null)
+    }
+
+    @Test
+    fun recentlyClosedPageCanBeReopenedFromOverview() {
+        clickLabel("Tabs: 1")
+        assertTrue("Overview was not displayed",
+            awaitNode("1 open · Tap a preview to switch") != null)
+        clickLabel("Close tab 1 of 1: QA Page Tools")
+        assertTrue("Recently closed page should offer a short-lived recovery action",
+            awaitNode("Reopen closed tab") != null)
+        clickLabel("Reopen closed tab")
+        assertTrue("Reopened page should reuse the sole blank New Tab",
+            awaitNode("Tabs: 1") != null)
+        assertTrue("Overview should dismiss after reopening",
+            awaitAbsent("Reopen closed tab"))
+    }
+
     private fun readTextZoom(view: WebView): Int {
         var zoom = -1
         instrumentation.runOnMainSync { zoom = view.settings.textZoom }
