@@ -104,6 +104,11 @@ import com.goreecloud.browsermobile.core.VisitedSite
 import com.goreecloud.browsermobile.core.SiteExceptions
 import com.goreecloud.browsermobile.core.SearchPolicy
 import com.goreecloud.browsermobile.core.UrlCleaner
+import com.goreecloud.browsermobile.ui.TabOverviewScreen
+import com.goreecloud.browsermobile.ui.TabOverviewItem
+import com.goreecloud.browsermobile.ui.TabOverviewColors
+import com.goreecloud.browsermobile.ui.TabPreviewKind
+import com.goreecloud.browsermobile.ui.TabPreviewCapture
 import java.io.ByteArrayInputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -119,6 +124,8 @@ private class BrowserTab {
     var url by mutableStateOf("")
     @Volatile var requestTopLevelUrl: String = ""
     var title by mutableStateOf("New Tab")
+    // Volatile, bounded preview; never written to disk or synced.
+    var thumbnail by mutableStateOf<Bitmap?>(null)
     var webspaceId by mutableStateOf("standard")
     var pinnedWebspace by mutableStateOf(false)
     var loading by mutableStateOf(false)
@@ -254,6 +261,7 @@ private fun configureWebView(
         }
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+            tab.thumbnail = null
             tab.loading = true
             tab.error = null
             if (url != null && NavigationPolicy.isHttpUrl(url)) {
@@ -336,10 +344,23 @@ private fun BrowserApp(
     var cleanedCount by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
 
+    fun captureCurrentPreview() {
+        if (current.surface == Surface.WEB) {
+            TabPreviewCapture.capture(current.webView)?.let { current.thumbnail = it }
+        }
+    }
+
+    fun openOverview() {
+        captureCurrentPreview()
+        focus.clearFocus()
+        panel = Panel.TABS
+    }
+
     fun openUrl(input: String) {
         val resolved = NavigationPolicy.resolve(input, preferences.cleanUrls)
         if (resolved.isBlank()) return
         current.error = null
+        current.thumbnail = null
         current.url = resolved
         if (!current.pinnedWebspace) current.webspaceId = webspaces.destination(resolved)
         current.requestTopLevelUrl = resolved
@@ -350,9 +371,10 @@ private fun BrowserApp(
 
     fun openNewTab(webspace: String? = null) {
         if (tabs.size >= 12) {
-            panel = Panel.TABS
+            openOverview()
             return
         }
+        captureCurrentPreview()
         val tab = BrowserTab().apply {
             webspaceId = webspace ?: current.webspaceId
             pinnedWebspace = webspace != null
@@ -365,6 +387,7 @@ private fun BrowserApp(
     fun openWebspace(id: String) {
         val found = tabs.firstOrNull { it.webspaceId == id }
         if (found != null) {
+            captureCurrentPreview()
             activeId = found.id
             panel = null
         } else openNewTab(id)
@@ -372,6 +395,7 @@ private fun BrowserApp(
 
     fun closeTab(tab: BrowserTab) {
         if (tabs.size == 1) {
+            tab.thumbnail = null
             tab.webView?.destroy()
             tab.webView = null
             tab.url = ""
@@ -381,6 +405,7 @@ private fun BrowserApp(
             tab.surface = Surface.NEW_TAB
         } else {
             val index = tabs.indexOf(tab)
+            tab.thumbnail = null
             tabs.remove(tab)
             if (activeId == tab.id) activeId = tabs[(index - 1).coerceAtLeast(0)].id
             tab.webView?.stopLoading()
@@ -404,7 +429,10 @@ private fun BrowserApp(
             panel != null -> panel = null
             current.surface == Surface.WEB && current.webView?.canGoBack() == true ->
                 current.webView?.goBack()
-            else -> current.surface = Surface.HOME
+            else -> {
+                captureCurrentPreview()
+                current.surface = Surface.HOME
+            }
         }
     }
 
@@ -565,12 +593,13 @@ private fun BrowserApp(
                 current.webView?.goForward()
             }
             DockButton(Icons.Default.Home, "Home", palette) {
+                captureCurrentPreview()
                 current.surface = Surface.HOME
             }
             DockButton(Icons.Default.Add, "New tab", palette) {
                 openNewTab()
             }
-            TabCountDock(tabs.size, palette) { panel = Panel.TABS }
+            TabCountDock(tabs.size, palette) { openOverview() }
             BrowserOverflowMenu(
                 tab = current,
                 preferences = preferences,
@@ -578,54 +607,63 @@ private fun BrowserApp(
                 activity = activity,
                 onPrivacy = { panel = Panel.PRIVACY },
                 onWebspaces = { panel = Panel.WEBSPACES },
-                onHome = { current.surface = Surface.HOME }
+                onHome = {
+                    captureCurrentPreview()
+                    current.surface = Surface.HOME
+                }
+            )
+        }
+        if (panel == Panel.TABS) {
+            TabOverviewScreen(
+                tabs = tabs.map { tab ->
+                    TabOverviewItem(
+                        id = tab.id,
+                        title = when (tab.surface) {
+                            Surface.NEW_TAB -> "New Tab"
+                            Surface.HOME -> "Home"
+                            Surface.WEB -> tab.title
+                        },
+                        address = when (tab.surface) {
+                            Surface.NEW_TAB -> "New Tab"
+                            Surface.HOME -> "goree://home"
+                            Surface.WEB -> Uri.parse(tab.url).host ?: "Website"
+                        },
+                        webspace = webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
+                            ?: "Standard",
+                        kind = when (tab.surface) {
+                            Surface.NEW_TAB -> TabPreviewKind.NEW_TAB
+                            Surface.HOME -> TabPreviewKind.HOME
+                            Surface.WEB -> TabPreviewKind.WEB
+                        },
+                        selected = tab.id == activeId,
+                        thumbnail = if (tab.surface == Surface.WEB) tab.thumbnail else null
+                    )
+                },
+                colors = TabOverviewColors(
+                    canvas = palette.canvas, surface = palette.surface,
+                    surfaceAlt = palette.surfaceAlt, text = palette.text,
+                    muted = palette.muted, accent = palette.accent,
+                    outline = palette.outline
+                ),
+                onSelect = { id ->
+                    if (id != activeId) captureCurrentPreview()
+                    activeId = id
+                    panel = null
+                },
+                onClose = { id -> tabs.firstOrNull { it.id == id }?.let(::closeTab) },
+                onNewTab = { openNewTab() },
+                onDismiss = { panel = null }
             )
         }
     }
 
-    if (panel != null) {
+    if (panel != null && panel != Panel.TABS) {
         ModalBottomSheet(
             onDismissRequest = { panel = null },
             containerColor = palette.surface, contentColor = palette.text
         ) {
             when (panel) {
-                Panel.TABS -> {
-                    SheetHeading("Your tabs", "${tabs.size} open · maximum 12", palette)
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 7.dp)) {
-                        items(tabs.toList(), key = { it.id }) { tab ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(bottom = 9.dp)
-                                    .background(
-                                        if (tab.id == activeId) palette.surfaceAlt else palette.canvas,
-                                        RoundedCornerShape(17.dp)
-                                    )
-                                    .clickable { activeId = tab.id; panel = null }
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Language, null, tint = palette.accent)
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(tab.title, color = palette.text, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                                    Text(webspaces.entries.firstOrNull { it.id == tab.webspaceId }?.name
-                                        ?: "Standard", color = palette.accent, fontSize = 10.sp)
-                                    Text(tab.url.ifEmpty { tab.surface.name.replace('_', ' ') },
-                                        color = palette.muted, fontSize = 12.sp, maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
-                                }
-                                IconButton(onClick = { closeTab(tab) }) {
-                                    Icon(Icons.Default.Close, "Close tab", tint = palette.muted)
-                                }
-                            }
-                        }
-                    }
-                    TextButton(onClick = { openNewTab() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New tab")
-                    }
-                    Spacer(Modifier.height(32.dp))
-                }
+                Panel.TABS -> Unit
                 Panel.BOOKMARKS -> BookmarksPanel(
                     preferences = preferences, palette = palette,
                     openUrl = { url -> panel = null; openUrl(url) }
