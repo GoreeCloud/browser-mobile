@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
@@ -57,6 +60,8 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.History
@@ -112,6 +117,7 @@ import com.goreecloud.browsermobile.core.BrowserPreferences
 import com.goreecloud.browsermobile.core.NavigationPolicy
 import com.goreecloud.browsermobile.core.BrowserChromeScrollPolicy
 import com.goreecloud.browsermobile.core.PageToolsPolicy
+import com.goreecloud.browsermobile.core.PageActionPolicy
 import com.goreecloud.browsermobile.core.FilterListEngine
 import com.goreecloud.browsermobile.core.FilterListStatus
 import com.goreecloud.browsermobile.core.FilterSource
@@ -155,6 +161,12 @@ private class BrowserTab {
     var findMatchOrdinal by mutableIntStateOf(0)
     var findPending by mutableStateOf(false)
     var textZoom by mutableIntStateOf(PageToolsPolicy.DEFAULT_TEXT_ZOOM)
+    // Explicit, session-only desktop request. Defaults are captured from each
+    // real WebView rather than assuming OEM-specific mobile UA/viewport flags.
+    var desktopSite by mutableStateOf(false)
+    var originalUserAgent: String? = null
+    var originalWideViewport = false
+    var originalOverviewMode = false
     var webView: WebView? = null
 }
 
@@ -256,6 +268,9 @@ private fun configureWebView(
         setGeolocationEnabled(false)
     }
     webView.isSaveEnabled = true
+    tab.originalUserAgent = webView.settings.userAgentString
+    tab.originalWideViewport = webView.settings.useWideViewPort
+    tab.originalOverviewMode = webView.settings.loadWithOverviewMode
     CookieManager.getInstance().setAcceptThirdPartyCookies(webView, preferences.thirdPartyCookies)
     val mainHandler = Handler(Looper.getMainLooper())
     webView.setFindListener { activeOrdinal, matchCount, isDone ->
@@ -408,6 +423,31 @@ private fun BrowserApp(
         focus.clearFocus()
     }
 
+    fun toggleDesktopSite(tab: BrowserTab) {
+        val view = tab.webView ?: return
+        val original = tab.originalUserAgent ?: return
+        val desktop = PageActionPolicy.desktopUserAgent(original) ?: return
+        val enabled = !tab.desktopSite
+        view.settings.apply {
+            userAgentString = if (enabled) desktop else original
+            useWideViewPort = if (enabled) true else tab.originalWideViewport
+            loadWithOverviewMode = if (enabled) true else tab.originalOverviewMode
+        }
+        tab.desktopSite = enabled
+        // An explicit user action reloads the current tab. POST-backed pages
+        // may prompt for form resubmission, as with ordinary WebView reload.
+        if (NavigationPolicy.isHttpUrl(tab.url)) view.reload()
+        revealChrome()
+    }
+
+    fun copyCleanLink(tab: BrowserTab) {
+        val link = PageActionPolicy.cleanCopyableLink(tab.url) ?: return
+        // Only an explicit click writes to Android's system clipboard; this is
+        // OS-managed and visible to other apps under applicable Android rules.
+        val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("Clean page link", link))
+    }
+
     fun captureCurrentPreview() {
         if (current.surface == Surface.WEB) {
             TabPreviewCapture.capture(current.webView)?.let { current.thumbnail = it }
@@ -464,6 +504,10 @@ private fun BrowserApp(
             tab.thumbnail = null
             tab.webView?.destroy()
             tab.webView = null
+            tab.desktopSite = false
+            tab.originalUserAgent = null
+            tab.originalWideViewport = false
+            tab.originalOverviewMode = false
             tab.url = ""
             tab.pinnedWebspace = false
             tab.requestTopLevelUrl = ""
@@ -704,6 +748,8 @@ private fun BrowserApp(
                 onWebspaces = { panel = Panel.WEBSPACES },
                 onFind = { current.findOpen = true; revealChrome() },
                 onTextSize = { revealChrome(); panel = Panel.TEXT_SIZE },
+                onCopyCleanLink = { copyCleanLink(current) },
+                onToggleDesktopSite = { toggleDesktopSite(current) },
                 onHome = {
                     captureCurrentPreview()
                     current.surface = Surface.HOME
@@ -1818,7 +1864,8 @@ private fun BrowserOverflowMenu(
     tab: BrowserTab, preferences: BrowserPreferences,
     palette: GcPalette, activity: Activity,
     onPrivacy: () -> Unit, onWebspaces: () -> Unit, onHome: () -> Unit,
-    onFind: () -> Unit, onTextSize: () -> Unit
+    onFind: () -> Unit, onTextSize: () -> Unit,
+    onCopyCleanLink: () -> Unit, onToggleDesktopSite: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val canAct = tab.surface == Surface.WEB
@@ -1869,6 +1916,31 @@ private fun BrowserOverflowMenu(
                                     putExtra(Intent.EXTRA_TEXT, tab.url)
                                 }, "Share link"
                             ))
+                        }
+                    }
+                }
+                if (canAct) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        MenuActionTile(
+                            Icons.Default.ContentCopy, "Copy clean link",
+                            PageActionPolicy.cleanCopyableLink(tab.url) != null,
+                            palette, modifier = Modifier.weight(1f)
+                        ) {
+                            expanded = false
+                            onCopyCleanLink()
+                        }
+                        MenuActionTile(
+                            Icons.Default.DesktopWindows,
+                            if (tab.desktopSite) "Mobile site" else "Desktop site",
+                            PageActionPolicy.desktopUserAgent(tab.originalUserAgent ?: "") != null,
+                            palette, modifier = Modifier.weight(1f)
+                        ) {
+                            expanded = false
+                            onToggleDesktopSite()
                         }
                     }
                 }
