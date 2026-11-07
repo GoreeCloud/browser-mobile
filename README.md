@@ -4,6 +4,10 @@
 
 GoreeCloud Browser Mobile is an original, privacy-oriented Android browser built in Kotlin with Jetpack Compose and the Android system WebView. The browser chrome is native; websites are rendered using Android WebView. It is **not** a VPN, a private DNS resolver, or a mature replacement for a security-reviewed browser.
 
+## Verification scope
+
+The Android workflow runs JVM policy tests, compiles the instrumentation APK, assembles the debug app and runs Lint. Actual touch/Compose/WebView chrome checks are in `app/src/androidTest/` and **must run only on an authorized test device under an isolated QA application ID**, never against a data-bearing browser installation. The device regression evidence and cleanup procedure are recorded in [Device acceptance](docs/DEVICE_ACCEPTANCE.md). Passing either suite is development-validation evidence, not a Stable release gate.
+
 ## Preview features
 
 - **Two deliberately different starting surfaces:** the founder-mockup-inspired **New Tab** now uses a cohesive editorial hero with a subtle native orbit ambient, elevated navy Startpage card, semantic tonal shortcut icons, and up to two *actual locally visited hosts* (only when history is enabled) for quick return. Bookmarks, host-only History, Android Downloads and Privacy Settings are functional. Shortcuts adapt from 4 columns to 2×2 for small screens or enlarged text. The separate Home retains dynamic destinations and privacy statistics. [New Tab audit](docs/NEW_TAB_MOCKUP_AUDIT.md) records the corrections and nonrelease boundaries.
