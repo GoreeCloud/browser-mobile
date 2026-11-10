@@ -23,8 +23,22 @@ object WebspacePolicy {
 
     fun validName(name: String): Boolean {
         val text = name.trim()
-        return text.length in 2..30 && text.none { it.isISOControl() } &&
-            text.any { it.isLetterOrDigit() }
+        if (text.length !in 2..30 || text.none { it.isLetterOrDigit() }) return false
+        var index = 0
+        while (index < text.length) {
+            val char = text[index]
+            // Android label rendering must never repair a broken UTF-16 name
+            // or let bidi and line separators disguise neighboring Webspaces.
+            if (Character.isSurrogate(char) &&
+                (!Character.isHighSurrogate(char) || index + 1 >= text.length ||
+                    !Character.isLowSurrogate(text[index + 1]))) return false
+            val code = Character.codePointAt(text, index)
+            if (Character.isISOControl(code) || code == 0x061C ||
+                code == 0x200E || code == 0x200F ||
+                code in 0x2028..0x202E || code in 0x2066..0x2069) return false
+            index += Character.charCount(code)
+        }
+        return true
     }
 
     private fun matches(host: String, domain: String) =
@@ -104,7 +118,8 @@ class WebspacesManager(context: Context) {
             val id = obj.optString("id", "")
             val name = obj.optString("name", "")
             if (id.startsWith("custom-") && id.length <= 64 && WebspacePolicy.validName(name) &&
-                out.none { it.id == id } && WebspacePolicy.builtIns.none {
+                out.none { it.id == id || it.name.equals(name, ignoreCase = true) } &&
+                WebspacePolicy.builtIns.none {
                     it.name.equals(name, ignoreCase = true)
                 }) out.add(WebspaceEntry(id, name))
         }
