@@ -77,8 +77,10 @@ class WebspacesManager(context: Context) {
         if (custom.none { it.id == id }) return
         custom = custom.filter { it.id != id }
         assignments = assignments.filterValues { it != id }
-        saveCustom()
-        saveAssignments()
+        // One preference transaction: a deleted Webspace must not retain its
+        // exact-host routing assignments if the app is stopped between writes.
+        storage.edit().putString("custom", customJson())
+            .putString("assignments", assignmentsJson()).apply()
     }
 
     fun assign(url: String, id: String) {
@@ -121,15 +123,23 @@ class WebspacesManager(context: Context) {
         result
     } catch (_: Exception) { emptyMap() }
 
-    private fun saveCustom() {
+    private fun customJson(): String {
         val a = JSONArray()
         custom.forEach { a.put(JSONObject().put("id", it.id).put("name", it.name)) }
-        storage.edit().putString("custom", a.toString()).apply()
+        return a.toString()
+    }
+
+    private fun assignmentsJson(): String {
+        val obj = JSONObject()
+        assignments.forEach { (host, id) -> obj.put(host, id) }
+        return obj.toString()
+    }
+
+    private fun saveCustom() {
+        storage.edit().putString("custom", customJson()).apply()
     }
 
     private fun saveAssignments() {
-        val obj = JSONObject()
-        assignments.forEach { (host, id) -> obj.put(host, id) }
-        storage.edit().putString("assignments", obj.toString()).apply()
+        storage.edit().putString("assignments", assignmentsJson()).apply()
     }
 }
