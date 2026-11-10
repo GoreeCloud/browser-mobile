@@ -87,8 +87,12 @@ object NavigationPolicy {
     // Pasted URI schemes are not search queries. In particular, credentials,
     // content paths and intent payloads must never be sent to Startpage.
     private val explicitUriScheme = Regex("""^[a-z][a-z0-9+.-]*:(?://|\S)""", RegexOption.IGNORE_CASE)
+    private const val MAX_NAVIGATION_INPUT_CHARS = 4096
 
     fun resolve(text: String, cleanLinks: Boolean = true): String {
+        // Bound external ACTION_VIEW inputs and pasted search terms before
+        // trimming or percent-encoding can amplify memory and URL length.
+        if (text.length > MAX_NAVIGATION_INPUT_CHARS) return ""
         val input = text.trim()
         if (input.isBlank()) return ""
         val looksLikeUrl = input.startsWith("https://", true) || input.startsWith("http://", true)

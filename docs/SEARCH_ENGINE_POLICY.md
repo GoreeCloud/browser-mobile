@@ -14,3 +14,7 @@ GoreeCloud Search repository state and actual endpoint readiness must be reverif
 6. Updated app builds and device behavior are verified. Switching is explicit and not time-triggered.
 
 Until every applicable gate passes, Startpage remains the fallback and sole configured search provider. Do not invent a GoreeCloud Search URL.
+
+## Bounded navigation input
+
+The native address/intent route rejects text longer than 4,096 characters **before** trimming or encoding it as a Startpage query or HTTPS URL. This limits resource amplification from pasted text and external `ACTION_VIEW` data; it does not constrain normal valid browsing, replace Android intent verification, or make Startpage searches private by itself. Malformed explicit URLs and unsupported URI schemes remain subject to the existing fail-closed controls.
