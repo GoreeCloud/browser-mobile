@@ -897,7 +897,18 @@ private fun BrowserApp(
                 Panel.DOWNLOADS -> DeviceDownloadsPanel(activity, palette)
                 Panel.TEXT_SIZE -> TextSizePanel(current, palette)
                 Panel.PRIVACY -> PrivacyPanel(
-                    activity, current, preferences, filterLists, palette, cleanedCount, library, icons
+                    activity, current, preferences, filterLists, palette, cleanedCount, library, icons,
+                    onThirdPartyCookiesChange = { enabled ->
+                        // Inactive WebViews can still load in the background.
+                        // A privacy toggle must apply to every live tab now,
+                        // not merely when that tab next becomes visible.
+                        preferences.updateThirdPartyCookies(enabled)
+                        tabs.forEach { tab ->
+                            tab.webView?.let { view ->
+                                CookieManager.getInstance().setAcceptThirdPartyCookies(view, enabled)
+                            }
+                        }
+                    }
                 )
                 Panel.WEBSPACES -> WebspacesPanel(
                     webspaces = webspaces, tabs = tabs, current = current, palette = palette,
@@ -1533,7 +1544,8 @@ private fun PrivacyPanel(
     palette: GcPalette,
     cleanedCount: Int,
     library: BrowsingLibrary,
-    icons: SiteIcons
+    icons: SiteIcons,
+    onThirdPartyCookiesChange: (Boolean) -> Unit
 ) {
     val message = remember { mutableStateOf("") }
     var confirmHistoryDisable by remember { mutableStateOf(false) }
@@ -1643,7 +1655,7 @@ private fun PrivacyPanel(
         PrivacyToggle(
             "Third-party cookies",
             "Off by default; can break some sign-ins.",
-            preferences.thirdPartyCookies, palette, preferences::updateThirdPartyCookies
+            preferences.thirdPartyCookies, palette, onThirdPartyCookiesChange
         )
         SheetAction(Icons.Default.Delete, "Clear all cookies and web storage", palette) {
             confirmCookiesClear = true
