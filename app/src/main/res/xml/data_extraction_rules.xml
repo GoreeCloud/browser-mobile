@@ -3,6 +3,7 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" path="." />
+        <exclude domain="device_root" path="." />
         <exclude domain="file" path="." />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
@@ -10,6 +11,7 @@
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" path="." />
+        <exclude domain="device_root" path="." />
         <exclude domain="file" path="." />
         <exclude domain="database" path="." />
         <exclude domain="sharedpref" path="." />
