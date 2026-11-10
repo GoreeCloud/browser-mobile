@@ -1694,7 +1694,8 @@ private fun PrivacyPanel(
             confirmButton = {
                 TextButton(onClick = {
                     library.updateHistoryEnabled(false)
-                    library.clear()
+                    // BrowsingLibrary owns host-record deletion at the
+                    // preference boundary; do not duplicate its data update.
                     icons.clear()
                     message.value = "Visited websites disabled; local history and favicons cleared"
                     confirmHistoryDisable = false
