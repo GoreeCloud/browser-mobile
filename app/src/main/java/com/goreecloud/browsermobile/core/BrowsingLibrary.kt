@@ -48,14 +48,32 @@ object VisitPolicy {
 class BrowsingLibrary(context: Context) {
     private val storage = context.getSharedPreferences("goreecloud_site_library", Context.MODE_PRIVATE)
 
-    var sites by mutableStateOf(load())
-        private set
     var historyEnabled by mutableStateOf(storage.getBoolean("history_enabled", true))
         private set
+    // Fail closed for old app versions that persisted disabled history but
+    // left a stale host index on disk. Do not expose it even for one frame.
+    var sites by mutableStateOf(if (historyEnabled) load() else emptyList())
+        private set
+
+    init {
+        if (!historyEnabled && storage.contains("sites")) {
+            storage.edit().remove("sites").apply()
+        }
+    }
 
     fun updateHistoryEnabled(enabled: Boolean) {
-        historyEnabled = enabled
-        storage.edit().putBoolean("history_enabled", enabled).apply()
+        if (!enabled) {
+            // One SharedPreferences editor transaction: a persisted opt-out
+            // must not coexist with the old site-host index after restart.
+            // Callers can also disable history outside the Privacy Center UI.
+            historyEnabled = false
+            sites = emptyList()
+            storage.edit().putBoolean("history_enabled", false)
+                .remove("sites").apply()
+        } else {
+            historyEnabled = true
+            storage.edit().putBoolean("history_enabled", true).apply()
+        }
     }
 
     fun record(url: String) {
