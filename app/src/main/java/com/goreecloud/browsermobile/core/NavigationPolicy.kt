@@ -84,6 +84,9 @@ object NavigationPolicy {
         RegexOption.IGNORE_CASE
     )
     private val ipv4Pattern = Regex("""^\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?(?:[/?#].*)?$""")
+    // Pasted URI schemes are not search queries. In particular, credentials,
+    // content paths and intent payloads must never be sent to Startpage.
+    private val explicitUriScheme = Regex("""^[a-z][a-z0-9+.-]*:(?://|\S)""", RegexOption.IGNORE_CASE)
 
     fun resolve(text: String, cleanLinks: Boolean = true): String {
         val input = text.trim()
@@ -92,10 +95,13 @@ object NavigationPolicy {
         // Explicit web addresses may contain credentials or private paths.
         // Never forward malformed explicit URLs to an external search provider.
         if (looksLikeUrl && !isHttpUrl(input)) return ""
+        // Host:port address bars are URLs, not unknown protocol schemes.
+        val bareWebAddress = !input.any { it.isWhitespace() } &&
+            (hostPattern.matches(input) || ipv4Pattern.matches(input))
+        if (!looksLikeUrl && !bareWebAddress && explicitUriScheme.containsMatchIn(input)) return ""
         val target = when {
             looksLikeUrl -> input
-            !input.any { it.isWhitespace() } && (hostPattern.matches(input) || ipv4Pattern.matches(input)) ->
-                "https://$input"
+            bareWebAddress -> "https://$input"
             else -> return SearchPolicy.search(input)
         }
         return if (isHttpUrl(target)) {

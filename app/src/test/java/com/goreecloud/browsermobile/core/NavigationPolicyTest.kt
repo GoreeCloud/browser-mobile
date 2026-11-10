@@ -90,6 +90,27 @@ class NavigationPolicyTest {
             NavigationPolicy.resolve("https://example.com/path"))
     }
 
+    @Test fun unsupportedUriSchemesNeverLeakToExternalSearch() {
+        for (input in listOf(
+            "mailto:private@example.invalid",
+            "tel:+12055550100",
+            "ftp://username:secret@example.invalid/private",
+            "file:///private/file.txt",
+            "content://documents/private",
+            "intent://example.invalid/#Intent;end",
+            "javascript:alert(1)",
+            "data:text/plain,private",
+            "https:malformed"
+        )) {
+            assertEquals("Explicit non-web URIs must not be searched", "", NavigationPolicy.resolve(input))
+            assertEquals("", NavigationPolicy.resolve(input, cleanLinks = false))
+        }
+        assertEquals(SearchPolicy.search("price: $5"), NavigationPolicy.resolve("price: $5"))
+        assertEquals("https://example.com", NavigationPolicy.resolve("https://example.com"))
+        assertEquals("https://example.com:8443/p", NavigationPolicy.resolve("example.com:8443/p"))
+        assertEquals("https://127.0.0.1:8080/", NavigationPolicy.resolve("127.0.0.1:8080/"))
+    }
+
     @Test fun disallowsWebviewDangerousSchemes() {
         assertFalse(NavigationPolicy.isHttpUrl("javascript:alert(1)"))
         assertFalse(NavigationPolicy.isHttpUrl("file:///etc/passwd"))
