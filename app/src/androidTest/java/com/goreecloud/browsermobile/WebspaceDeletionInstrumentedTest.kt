@@ -13,6 +13,39 @@ import org.junit.runner.RunWith
 /** Synthetic routing fixture, restricted to the isolated Browser .qa package. */
 @RunWith(AndroidJUnit4::class)
 class WebspaceDeletionInstrumentedTest {
+    @Test fun legacyCustomLabelsCannotReintroduceSpoofedOrDuplicateWebspaces() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        require(context.packageName.endsWith(".qa")) {
+            "Legacy Webspace fixture requires isolated .qa application"
+        }
+        val prefs = context.getSharedPreferences("goreecloud_webspaces", Context.MODE_PRIVATE)
+        val originalCustom = prefs.getString("custom", null)
+        val originalAssignments = prefs.getString("assignments", null)
+        try {
+            val legacy = JSONArray()
+                .put(JSONObject().put("id", "custom-first").put("name", "QA Duplicate"))
+                .put(JSONObject().put("id", "custom-second").put("name", "qa duplicate"))
+                .put(JSONObject().put("id", "custom-bidi")
+                    .put("name", "QA " + 0x202E.toChar() + "Spoof"))
+                .put(JSONObject().put("id", "custom-valid")
+                    .put("name", "QA " + String(Character.toChars(0x1F512))))
+            assertTrue(prefs.edit().putString("custom", legacy.toString())
+                .putString("assignments", "{}").commit())
+            val manager = WebspacesManager(context)
+            assertEquals(2, manager.custom.size)
+            assertEquals("QA Duplicate", manager.custom[0].name)
+            assertEquals("custom-first", manager.custom[0].id)
+            assertEquals("custom-valid", manager.custom[1].id)
+        } finally {
+            val editor = prefs.edit()
+            if (originalCustom == null) editor.remove("custom")
+            else editor.putString("custom", originalCustom)
+            if (originalAssignments == null) editor.remove("assignments")
+            else editor.putString("assignments", originalAssignments)
+            assertTrue(editor.commit())
+        }
+    }
+
     @Test fun deletingCustomWebspaceRemovesSavedRoutingInOnePreferenceTransaction() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         require(context.packageName.endsWith(".qa")) {
