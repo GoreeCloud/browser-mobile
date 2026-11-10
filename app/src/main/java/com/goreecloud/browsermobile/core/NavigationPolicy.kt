@@ -89,6 +89,9 @@ object NavigationPolicy {
         val input = text.trim()
         if (input.isBlank()) return ""
         val looksLikeUrl = input.startsWith("https://", true) || input.startsWith("http://", true)
+        // Explicit web addresses may contain credentials or private paths.
+        // Never forward malformed explicit URLs to an external search provider.
+        if (looksLikeUrl && !isHttpUrl(input)) return ""
         val target = when {
             looksLikeUrl -> input
             !input.any { it.isWhitespace() } && (hostPattern.matches(input) || ipv4Pattern.matches(input)) ->
