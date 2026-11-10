@@ -111,6 +111,16 @@ class NavigationPolicyTest {
         assertEquals("https://127.0.0.1:8080/", NavigationPolicy.resolve("127.0.0.1:8080/"))
     }
 
+    @Test fun boundsPastedAndExternalNavigationBeforeSearchEncoding() {
+        val huge = "x".repeat(4097)
+        assertEquals("", NavigationPolicy.resolve(huge))
+        assertEquals("", NavigationPolicy.resolve(huge, cleanLinks = false))
+        assertEquals("", NavigationPolicy.resolve("https://example.org/" + "x".repeat(4096)))
+        assertEquals("", NavigationPolicy.resolve("content://private/" + "x".repeat(4096)))
+        assertEquals(SearchPolicy.search("privacy"), NavigationPolicy.resolve("privacy"))
+        assertEquals("https://example.org", NavigationPolicy.resolve("https://example.org"))
+    }
+
     @Test fun disallowsWebviewDangerousSchemes() {
         assertFalse(NavigationPolicy.isHttpUrl("javascript:alert(1)"))
         assertFalse(NavigationPolicy.isHttpUrl("file:///etc/passwd"))
