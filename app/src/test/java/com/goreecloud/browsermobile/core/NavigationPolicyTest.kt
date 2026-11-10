@@ -72,6 +72,24 @@ class NavigationPolicyTest {
         assertEquals(url, UrlCleaner.clean(url).url)
     }
 
+    @Test fun malformedExplicitWebAddressesNeverBecomeExternalSearchQueries() {
+        for (input in listOf(
+            "https://person:private-password@example.com/private",
+            "https://example.com/private path",
+            "http://",
+            "HTTPS://person@example.com/account"
+        )) {
+            assertEquals("Malformed explicit URL should not enter Startpage search", "",
+                NavigationPolicy.resolve(input))
+            assertEquals("", NavigationPolicy.resolve(input, cleanLinks = false))
+        }
+        // Ordinary user-entered search queries remain supported.
+        assertEquals("https://www.startpage.com/do/search?query=privacy+first",
+            NavigationPolicy.resolve("privacy first"))
+        assertEquals("https://example.com/path",
+            NavigationPolicy.resolve("https://example.com/path"))
+    }
+
     @Test fun disallowsWebviewDangerousSchemes() {
         assertFalse(NavigationPolicy.isHttpUrl("javascript:alert(1)"))
         assertFalse(NavigationPolicy.isHttpUrl("file:///etc/passwd"))
