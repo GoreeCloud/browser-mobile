@@ -49,6 +49,19 @@ class BrowsingHistoryOptOutInstrumentedTest {
             // Opting back in does not resurrect an old pre-opt-out host.
             reloaded.updateHistoryEnabled(true)
             assertTrue(BrowsingLibrary(context).sites.isEmpty())
+
+            // Upgrade/restart fixture: an older app version could have stored
+            // "history disabled" and retained sites across separate writes.
+            val legacy = """[{"host":"legacy-history.example.test","visits":1,"lastVisited":100}]"""
+            assertTrue(preferences.edit().putBoolean("history_enabled", false)
+                .putString("sites", legacy).commit())
+            assertTrue(preferences.contains("sites"))
+            val migrated = BrowsingLibrary(context)
+            assertFalse(migrated.historyEnabled)
+            assertTrue("A disabled setting must never expose legacy stored hosts",
+                migrated.sites.isEmpty())
+            assertFalse("Restart must erase stale sites from an older app version",
+                preferences.contains("sites"))
         } finally {
             first.clear()
             first.updateHistoryEnabled(false)
